@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Launcher Bottom Panel</title>
+    <link rel="stylesheet" href="./renderer.css" />
+  </head>
+  <body>
+    <main class="panel-root">
+      <header class="panel-toolbar">
+        <div id="admin-chrome" class="admin-chrome" hidden>
+          <div class="admin-row admin-row--url">
+            <label class="admin-label" for="url-input">Browser URL</label>
+            <input
+              id="url-input"
+              class="admin-input admin-input--url"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="https://example.com"
+              aria-label="embedded browser URL"
+            />
+            <button id="url-go" class="admin-button" type="button">Go</button>
+          </div>
+          <div class="admin-row admin-row--devtools">
+            <label class="admin-label" for="terminal-cmd">Terminal</label>
+            <input
+              id="terminal-cmd"
+              class="admin-input"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="command line"
+              aria-label="terminal command"
+            />
+            <button id="terminal-run" class="admin-button" type="button">Run</button>
+            <label class="admin-label" for="inject-css">CSS</label>
+            <input
+              id="inject-css"
+              class="admin-input admin-input--snippet"
+              type="text"
+              spellcheck="false"
+              placeholder="body { }"
+              aria-label="inject CSS into browser"
+            />
+            <button id="css-inject" class="admin-button" type="button">Inject</button>
+            <label class="admin-label" for="exec-script">Script</label>
+            <input
+              id="exec-script"
+              class="admin-input admin-input--snippet"
+              type="text"
+              spellcheck="false"
+              placeholder="document.title"
+              aria-label="execute script in browser"
+            />
+            <button id="script-run" class="admin-button" type="button">Eval</button>
+          </div>
+          <pre id="terminal-log" class="terminal-log" aria-live="polite" aria-label="terminal output"></pre>
+        </div>
+        <div class="panel-toolbar-main">
+          <div id="resize-handle" class="resize-handle" aria-label="resize handle">
+            <span id="drag-height-label" class="drag-height-label" hidden aria-hidden="true"></span>
+          </div>
+          <div class="toolbar-actions">
+            <button id="toggle-collapse" class="icon-button collapse-button" type="button" aria-label="collapse bottom panel" title="Collapse">
+              <svg class="collapse-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 10l5 5 5-5H7z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </header>
+      <section class="position-box">
+        <div class="surface-shell">
+          <div class="surface-copy">
+            <span class="surface-kicker">Tool Workspace</span>
+            <h1>터미널 / 생성 툴 패널</h1>
+            <p>프로젝트 관리에서 배치한 terminal tool 인스턴스가 이 영역에 독립적으로 렌더링됩니다.</p>
+            <div id="tool-instance-chip" class="tool-instance-chip">terminal</div>
+          </div>
+          <div class="surface-grid" aria-hidden="true">
+            <article class="surface-card">
+              <strong>Bridge</strong>
+              <span>프로젝트 단위 통신</span>
+            </article>
+            <article class="surface-card">
+              <strong>Input</strong>
+              <span>명령 / 생성 요청</span>
+            </article>
+            <article class="surface-card">
+              <strong>Output</strong>
+              <span>로그 / 결과 확인</span>
+            </article>
+          </div>
+        </div>
+      </section>
+      <div id="settings-summary" class="settings-summary" aria-live="polite"></div>
+    </main>
+
+    <script type="module" src="./renderer.js"></script>
+  </body>
+</html>

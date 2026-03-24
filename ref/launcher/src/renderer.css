@@ -1,0 +1,335 @@
+:root {
+  --bg: #1e1e1e;
+  --panel: #252526;
+  --text: #d4d4d4;
+  --subtext: #9da0a6;
+  --border: #3b3b3b;
+  --button-bg: #2d2d30;
+  --button-hover: #3a3a3f;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f3f3f3;
+  --panel: #ffffff;
+  --text: #1f2328;
+  --subtext: #4d5562;
+  --border: #d0d7de;
+  --button-bg: #f6f8fa;
+  --button-hover: #eaeef2;
+  color-scheme: light;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.panel-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.panel-toolbar {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 92%, #000 8%);
+}
+
+.panel-toolbar-main {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 10px;
+  min-height: 28px;
+}
+
+.admin-chrome {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-label {
+  font-size: 10px;
+  color: var(--subtext);
+  flex: 0 0 auto;
+}
+
+.admin-input {
+  flex: 1 1 120px;
+  min-width: 80px;
+  max-width: 100%;
+  padding: 4px 6px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.admin-input--url {
+  flex: 1 1 200px;
+}
+
+.admin-input--snippet {
+  flex: 1 1 100px;
+  max-width: 180px;
+}
+
+.admin-button {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--button-bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.admin-button:hover {
+  background: var(--button-hover);
+}
+
+.terminal-log {
+  margin: 0;
+  max-height: 72px;
+  overflow: auto;
+  padding: 4px 6px;
+  font-size: 10px;
+  line-height: 1.35;
+  font-family: ui-monospace, Consolas, monospace;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--subtext);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.resize-handle {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent 0%, var(--border) 20%, var(--border) 80%, transparent 100%);
+  cursor: row-resize;
+  transition: background 120ms ease;
+}
+
+.resize-handle:hover,
+.resize-handle.is-dragging {
+  background: linear-gradient(90deg, transparent 0%, #5b9cff 20%, #5b9cff 80%, transparent 100%);
+}
+
+.drag-height-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #0e639c;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 1px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+  pointer-events: none;
+  line-height: 16px;
+}
+
+.drag-height-label[hidden] {
+  display: none;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.position-box {
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.surface-shell {
+  width: min(100%, 760px);
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(91, 156, 255, 0.12), transparent 32%),
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, #000 8%), var(--panel));
+}
+
+.surface-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.surface-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--subtext);
+}
+
+.surface-copy h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.surface-copy p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--subtext);
+  line-height: 1.5;
+}
+
+.tool-instance-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, #5b9cff 12%, transparent);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.surface-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.surface-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+}
+
+.surface-card strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.surface-card span {
+  font-size: 11px;
+  color: var(--subtext);
+}
+
+.settings-summary {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  font-size: 11px;
+  color: var(--subtext);
+  max-width: calc(100% - 24px);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.panel-root.is-collapsed .position-box {
+  display: none;
+}
+
+.panel-root.is-collapsed .settings-summary {
+  right: auto;
+  left: 10px;
+  bottom: 8px;
+  max-width: calc(100% - 20px);
+}
+
+.icon-button,
+button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--button-bg);
+  color: var(--text);
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.icon-button {
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.icon-button svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  opacity: 0.9;
+}
+
+.icon-button:hover,
+button:hover {
+  background: var(--button-hover);
+}
+
+.collapse-button .collapse-icon {
+  transition: transform 140ms ease;
+}
+
+.collapse-button.is-open .collapse-icon {
+  transform: rotate(180deg);
+}
+
+.collapse-button.is-open {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+@media (max-width: 820px) {
+  .surface-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,253 @@
+version: 0.1.0
+
+routing_scope:
+  purpose: >
+    Unify workspace gateway, internal and external domain naming, project
+    ingress ports, and per-project channel routing so projects do not accumulate
+    ad-hoc ports and proxy rules.
+  status: draft-authoritative
+  extends:
+    - doc/3. Platform/04-runtime-platform-plan.md
+    - doc/3. Platform/05-system-contracts.yaml
+    - doc/3. Platform/07-control-plane-and-observability.yaml
+
+principles:
+  - workspace-managed http traffic enters through one workspace gateway
+  - each project owns one canonical ingress port for user-facing http channels
+  - project features should be separated by readable channels and paths, not by opening many public ports
+  - internal worker communication should prefer ipc, message ports, or private loopback instead of new public listeners
+  - internal and external domain exposure must be declarative and reviewable
+  - domain, host, path, and port resolution must remain deterministic and human-readable
+
+workspace_gateway_model:
+  gateway_role:
+    name: workspace-gateway
+    default_engine: caddy
+    responsibilities:
+      - terminate or proxy workspace http and https traffic
+      - route project hosts to the correct project ingress port
+      - preserve host, path, and websocket semantics required by project channels
+      - keep gateway admin endpoints isolated from project traffic
+  caddy_basis:
+    reasons:
+      - Caddy provides reverse_proxy for upstream routing
+      - Caddy supports host and path matching in the Caddyfile
+      - Caddy provides handle and handle_path for readable path routing
+      - Caddy supports automatic https and configurable http_port values
+      - Caddy admin api exists and must remain isolated from untrusted project code
+  operating_modes:
+    local-dev:
+      http_port: 18080
+      https_port: 18443
+      tls_mode: local-automatic
+      local_fallback_mode: localhost-plus-hosts-file-or-local-domain
+    packaged-desktop:
+      http_port: 80 or configured-high-port
+      https_port: 443 or configured-high-port
+      tls_mode: internal-or-managed
+      local_fallback_mode: local-domain-first
+  rules:
+    - the gateway is global to the workspace, not per project
+    - projects do not own their own proxy daemon by default
+    - caddy admin bind must stay local-only and out of project route space
+
+domain_and_host_strategy:
+  host_pattern_policy:
+    canonical_pattern: "<project_key>.<base_domain>"
+    channel_expression: "channel is expressed by path prefix, not by separate host, unless a reviewed exception exists"
+    examples:
+      internal:
+        - https://proj-bridge-lab.internal.clibase.local/app
+        - https://proj-bridge-lab.internal.clibase.local/api
+        - https://proj-bridge-lab.internal.clibase.local/mcp
+      external:
+        - https://proj-bridge-lab.apps.example.com/app
+        - https://proj-bridge-lab.apps.example.com/api
+      direct_ingress:
+        - http://127.0.0.1:46101/app
+        - http://127.0.0.1:46101/api
+  visibility_model:
+    channel_visibility_values:
+      - internal-only
+      - internal-and-external
+      - loopback-only
+    rules:
+      - external exposure is deny-by-default
+      - internal and external hosts must resolve to the same project ingress contract, not different application stacks
+      - loopback-only channels are allowed for callbacks and diagnostics that must not be published externally
+
+project_ingress_policy:
+  one_project_one_ingress:
+    rule: one project owns one canonical ingress port for user-facing http traffic
+    rationale:
+      - avoids public port sprawl and collisions
+      - keeps domain and route registration simple
+      - lets Caddy route one host to one project ingress cleanly
+  allowed_channel_examples:
+    - channel_key: chan-app
+      path_prefix: /app
+      target_kind: project-ui
+    - channel_key: chan-api
+      path_prefix: /api
+      target_kind: project-http-api
+    - channel_key: chan-mcp
+      path_prefix: /mcp
+      target_kind: mcp-http-bridge
+    - channel_key: chan-auth
+      path_prefix: /auth
+      target_kind: auth-callback-handler
+    - channel_key: chan-events
+      path_prefix: /events
+      target_kind: sse-or-websocket-stream
+    - channel_key: chan-artifacts
+      path_prefix: /artifacts
+      target_kind: exported-file-surface
+    - channel_key: chan-health
+      path_prefix: /health
+      target_kind: health-surface
+  rules:
+    - channels share one ingress and are distinguished by path prefix
+    - project features that need http exposure must register under channels.yaml instead of binding a new public port
+    - mcp, auth callbacks, api, artifacts, and event streams are all part of one project ingress model
+
+internal_service_policy:
+  preferred_transports:
+    - electron ipc
+    - message ports
+    - stdio
+    - private loopback only when unavoidable
+  rules:
+    - internal worker services must not become public route contracts by accident
+    - module-local dev servers or language tools may use private loopback ports only if hidden behind the project ingress or marked development-only
+    - private helper ports must still be allocated from the registry when long-lived
+  exceptions:
+    development_tools:
+      allowed_examples:
+        - vite dev server
+        - language server
+        - test runner dashboard
+      conditions:
+        - clearly marked as development-only
+        - not treated as canonical project address
+        - proxied or hidden behind the gateway when user-facing
+
+storage_contract:
+  durable_files:
+    - workspace/channel-domains.yaml
+    - workspace/port-registry.yaml
+    - workspace/projects/<project_key>/channels.yaml
+  required_meanings:
+    channel-domains.yaml:
+      - workspace gateway engine
+      - internal and external base domains
+      - canonical host pattern
+      - tls mode
+      - gateway listen ports
+    port-registry.yaml:
+      - reserved port ranges
+      - stable project ingress allocations
+      - private helper allocation notes when approved
+    channels.yaml:
+      - project ingress key
+      - visible channels
+      - path prefixes
+      - visibility policy
+      - route notes
+
+example_files:
+  channel_domains_yaml:
+    workspace_gateway:
+      gateway_key: gateway-workspace-primary
+      proxy_engine: caddy
+      mode: local-dev
+      http_port: 18080
+      https_port: 18443
+      admin_bind: 127.0.0.1:2019
+      tls_mode: local-automatic
+      internal_base_domain: internal.clibase.local
+      external_base_domain: apps.example.com
+      host_pattern: "<project_key>.<base_domain>"
+      channel_expression: path-prefix
+  port_registry_yaml:
+    reserved_ranges:
+      project_ingress:
+        start: 46100
+        end: 46199
+      private_helpers:
+        start: 46200
+        end: 46399
+    project_ingress_ports:
+      - project_key: proj-bridge-lab
+        ingress_key: ingress-bridge-lab
+        ingress_port: 46101
+        allocation_state: active
+      - project_key: proj-docs-studio
+        ingress_key: ingress-docs-studio
+        ingress_port: 46102
+        allocation_state: reserved
+  project_channels_yaml:
+    project_key: proj-bridge-lab
+    ingress_key: ingress-bridge-lab
+    canonical_host_labels:
+      internal_host: proj-bridge-lab.internal.clibase.local
+      external_host: proj-bridge-lab.apps.example.com
+    channel_host_mode: host-project-plus-path-channel
+    channels:
+      - channel_key: chan-app
+        display_name: App UI
+        visibility: internal-and-external
+        path_prefix: /app
+        target_kind: project-ui
+        exposure_policy_key: policy-channel-app-standard
+      - channel_key: chan-api
+        display_name: Project API
+        visibility: internal-and-external
+        path_prefix: /api
+        target_kind: project-http-api
+        exposure_policy_key: policy-channel-api-standard
+      - channel_key: chan-mcp
+        display_name: MCP Bridge
+        visibility: internal-only
+        path_prefix: /mcp
+        target_kind: mcp-http-bridge
+        exposure_policy_key: policy-channel-mcp-internal
+      - channel_key: chan-auth
+        display_name: Auth Callback
+        visibility: loopback-only
+        path_prefix: /auth
+        target_kind: auth-callback-handler
+        exposure_policy_key: policy-channel-auth-loopback
+      - channel_key: chan-events
+        display_name: Event Stream
+        visibility: internal-only
+        path_prefix: /events
+        target_kind: sse-or-websocket-stream
+        exposure_policy_key: policy-channel-events-internal
+
+caddy_mapping_guidance:
+  default_mapping:
+    - gateway host resolves project_key from the hostname
+    - gateway reverse proxies the request to the single project ingress port
+    - project ingress keeps path prefixes and routes channels internally
+  optional_path_stripping:
+    allowed_when:
+      - a specialized upstream requires prefix stripping
+    rule:
+      - use handle_path only as an explicit reviewed exception
+  streaming_support:
+    rules:
+      - websocket and sse channels must stay compatible with reverse_proxy behavior
+      - long-lived streams should be treated as first-class channels, not special hacks
+
+governance_rules:
+  - do not create per-module public ports as a convenience shortcut
+  - do not mix canonical product routes with development-tool helper ports
+  - do not expose caddy admin api to project code or external traffic
+  - route changes must update channel-domains.yaml, port-registry.yaml, and channels.yaml together
+
+decision_summary:
+  answer:
+    - no, this routing strategy was not previously unified in one document
+    - now the canonical direction is one workspace gateway plus one ingress port per project
+    - multiple project features are organized as channels under one ingress, primarily by path prefix
+    - caddy is the default routing layer for host and path management

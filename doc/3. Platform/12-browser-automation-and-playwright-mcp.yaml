@@ -1,0 +1,265 @@
+version: 0.1.0
+
+automation_scope:
+  purpose: >
+    Define how a browser surface shown inside the app can be controlled from
+    terminal commands, project cli, and Playwright MCP without creating a hidden
+    side channel outside the control plane.
+  status: draft-authoritative
+  extends:
+    - doc/3. Platform/05-system-contracts.yaml
+    - doc/3. Platform/07-control-plane-and-observability.yaml
+    - doc/3. Platform/10-browser-terminal-and-ide-foundation.yaml
+
+principles:
+  - terminal input is not privileged by itself
+  - browser automation must target a named browser module or a named browser session
+  - product-grade browser automation means controlling the currently visible browser surface, not a newly launched side browser
+  - Playwright MCP is an attached controller surface, not a direct owner of Electron internals
+  - every browser automation action must be policy-checked, logged, and replay-addressable
+  - auth-sensitive and security-sensitive pages are denied for automation by default unless policy explicitly allows otherwise
+
+automation_preconditions:
+  full_control_requires:
+    - the browser surface must be owned by the runtime host as a specific Electron WebContentsView or WebContents
+    - the runtime host must have an approved control backend for that exact target
+    - the control backend must be one of:
+        - webContents operations for simple navigation or capture
+        - webContents debugger attachment with Chrome DevTools Protocol commands
+        - a host-reviewed hybrid bridge that stays policy-scoped
+  limited_control_only:
+    - a plain visible browser surface without an attached host control backend supports viewing and simple host-observed navigation only
+    - read-only inspection may still be available through host observations such as url, title, recent console summary, or captured selection
+  not_assumed:
+    - do not assume that because a page is visible in Electron it is automatically fully controllable
+    - do not assume stock Playwright MCP can directly drive an arbitrary existing WebContentsView without host mediation
+    - do not assume every automation primitive is available when the bridge is running in debugger or CDP mode
+  operational_constraints:
+    - debugger attach and detach lifecycle must be managed by the runtime host
+    - opening DevTools can detach an attached debugger session for that webContents
+    - sendInputEvent-based input automation depends on focus and window state
+    - multi-frame and popup scenarios require explicit target remapping
+
+supported_automation_modes:
+  embedded-browser-bridge:
+    goal: automate the exact browser module currently visible in the app
+    controller_surfaces:
+      - global-cli
+      - project-cli
+      - gui
+      - mcp
+    requirements:
+      - target module_key or browser session key must be explicit
+      - runtime host must own the automation bridge
+      - browser module policy must allow automation
+      - all actions must route through control plane first
+    limitations:
+      - not every Playwright feature maps one-to-one onto an already-running embedded browser surface
+      - auth pages, downloads, permissions, and popup flows may still be policy-blocked
+      - bridge quality must be labeled honestly as experimental, beta, or stable
+  read-only-inspection:
+    goal: inspect the visible browser module without full active automation
+    controller_surfaces:
+      - global-cli
+      - project-cli
+      - gui
+      - mcp
+    supported_reads:
+      - current url
+      - page title
+      - selection snapshot
+      - recent console summary
+      - recent navigation summary
+
+non_product_modes:
+  separate-browser-automation:
+    status: excluded-from-primary-product-goal
+    reason:
+      - launching a different automation browser does not satisfy the requirement to control the browser the user is currently looking at
+      - result divergence between visible browser and automation browser is not acceptable for the main workflow
+    allowed_only_for:
+      - isolated diagnostics
+      - internal test harnesses
+      - non-product experiments
+
+research_findings:
+  official_basis:
+    electron_webcontents:
+      - Electron documents that webContents is responsible for rendering and controlling a web page
+      - Electron exposes a debugger on webContents that can attach to a specific webContents and send Chrome DevTools Protocol commands
+      - Electron exposes webContents.fromDevToolsTargetId and getOrCreateDevToolsTargetId for mapping between a specific target and a specific visible webContents
+      - Electron exposes sendInputEvent for page input, and the containing BrowserWindow must be focused for it to work
+      - Electron notes that invoking DevTools detaches the attached debugger for that webContents
+    playwright:
+      - Playwright marks Electron support as experimental and documents it around launching an Electron app
+      - Playwright connectOverCDP can attach to an existing Chromium browser, but Playwright documents that this path has significantly lower fidelity than its normal protocol
+  architecture_implication:
+    - same-surface control is technically viable through a host-owned Electron automation bridge
+    - same-surface control should not assume stock Playwright MCP can directly own the visible WebContentsView
+    - Playwright MCP may still be used as a command surface, but the execution target must remain the host-owned bridge
+    - ordinary browsing mode and full automation mode are different operational states and must be labeled separately in product behavior
+  unresolved_validation_items:
+    - verify target resolution against multiple concurrent WebContentsView browser modules
+    - verify debugger-bridge stability when DevTools opens or closes
+    - verify policy behavior on popup, download, and permission-request flows
+    - verify automation behavior on complex sites without violating auth policy
+
+terminal_entrypoint_policy:
+  allowed_paths:
+    - terminal -> project cli command -> control plane action -> browser automation executor
+    - terminal -> project cli command -> control plane action -> mcp.tool.call -> browser automation executor
+  forbidden_paths:
+    - terminal shell text directly mutates browser module without a named action
+    - terminal module invokes browser module directly
+    - playwright mcp bypasses runtime host and attaches itself to random renderer internals
+  rules:
+    - the bottom terminal can be the place where the user types the command, but the actual authority comes from project cli or global cli
+    - shell aliases may improve ergonomics, but they still resolve to named actions
+    - every stable browser automation command must be invokable without hidden terminal-only shortcuts
+
+target_resolution_contract:
+  required_target_dimensions:
+    - project_key
+    - tab_key or explicit cross-tab policy
+    - module_key or browser session key
+  optional_aliases:
+    - focused-browser
+    - default-browser
+    - browser-<purpose>
+  rules:
+    - destructive or stateful automation requires an explicit target when more than one browser module is open
+    - alias resolution must be deterministic and logged
+    - automation targets may not silently jump across projects
+
+browser_automation_actions:
+  stable_action_names:
+    - browser.automation.navigate
+    - browser.automation.click
+    - browser.automation.fill
+    - browser.automation.press
+    - browser.automation.wait-for
+    - browser.automation.select
+    - browser.automation.extract-text
+    - browser.automation.capture-screenshot
+    - browser.automation.evaluate-readonly
+  routing_rules:
+    - gui and cli should prefer these stable action names for visible browser automation
+    - mcp tools may map to these actions through mcp.tool.call, but the underlying audit root remains the browser automation action
+    - browser.navigate remains the simpler navigation contract and is not automatically upgraded to a full automation session
+  redaction_rules:
+    - typed secrets entered by automation must be redacted in durable logs
+    - selector summaries may be logged, but secret values and protected text fields may not
+
+playwright_mcp_integration:
+  registry_pattern:
+    mcp_server_key_pattern: mcp-playwright-<purpose>
+    attachment_key_pattern: attach-mcp-playwright-<purpose>-<nn>
+  integration_modes:
+    embedded_target_mode:
+      description: >
+        Playwright-style commands target the visible browser module through a
+        host-owned automation bridge.
+      requirements:
+        - runtime host resolves the target browser module
+        - runtime host exposes a reviewed automation adapter
+        - mcp does not receive direct unrestricted Electron power
+      rules:
+        - do not assume an off-the-shelf Playwright MCP can automatically attach to WebContentsView
+        - if CDP or debugger bridging is used, it must remain host-mediated and policy-scoped
+        - bridge health and compatibility must be observable
+  implementation_bias:
+    phase_1: support read-only-inspection and host-owned same-surface automation proof-of-concept first
+    phase_2: promote embedded_target_mode only after the host automation bridge is validated on real project flows
+
+host_automation_bridge:
+  responsibilities:
+    - resolve target browser module
+    - translate stable automation actions into browser-surface operations
+    - enforce policy and redaction
+    - publish normalized events and artifacts
+  possible_execution_backends:
+    - host browser adapter backed by Electron webContents operations
+    - host-reviewed debugger or CDP bridge for the target webContents
+    - hybrid adapter that combines high-level browser actions with readonly inspection
+  rules:
+    - backend choice is an implementation detail; the top-level action contract stays stable
+    - remote pages must never receive host automation privileges as a raw javascript bridge
+    - if debugger attachment is used, DevTools interaction and detach behavior must be treated as a first-class operational constraint
+    - target mapping must bind automation to the exact visible WebContentsView chosen by module_key or session_key
+
+security_policy:
+  default_denials:
+    - oauth, oidc, social login, enterprise sso, and other sensitive auth pages
+    - provider flows explicitly marked automation-denied
+    - hidden background browser targets outside the active project scope
+  confirmation_candidates:
+    - file upload actions
+    - download approval changes
+    - popup allowance changes
+    - multi-step destructive form submissions
+  rules:
+    - browser automation does not bypass popup, permission, download, or certificate policy
+    - project policy may narrow automation surfaces further than the workspace default
+
+observability_contract:
+  required_action_fields:
+    - action_key
+    - trace_key
+    - action_name
+    - target_module_key or target_session_key
+    - automation_mode
+    - selector_summary or navigation_target_summary
+  recommended_event_names:
+    - browser.automation.started
+    - browser.automation.step-completed
+    - browser.automation.wait-satisfied
+    - browser.automation.artifact-produced
+    - browser.automation.failed
+  artifact_examples:
+    - screenshot path
+    - extracted text summary
+    - dom snapshot reference
+  rules:
+    - automation logs must distinguish visible-browser actions from separate-browser actions
+    - replay should preserve target resolution context
+    - credential-bearing values must be redacted before durable logging
+
+project_attachment_examples:
+  attachments_yaml_fragment:
+    project_key: proj-bridge-lab
+    enabled_mcp_attachments:
+      - attachment_key: attach-mcp-playwright-docs-01
+        mcp_server_key: mcp-playwright-docs
+        attachment_scope: project
+        enabled_tools:
+          - browser.automation.navigate
+          - browser.automation.click
+          - browser.automation.extract-text
+        policy_key: policy-mcp-browser-automation-standard
+        surface_modes:
+          - gui
+          - project-cli
+          - terminal
+    action_exposure_policy:
+      require_global_cli_projection: true
+      require_gui_projection: true
+      require_logging: true
+
+cli_examples:
+  project_cli_examples:
+    - command: clibase project action run --project proj-bridge-lab --action browser.automation.navigate --module mod-browser-docs-01 --url https://example.com
+      meaning: navigate the visible browser module through the control plane
+    - command: clibase project action run --project proj-bridge-lab --action browser.automation.click --module mod-browser-docs-01 --selector button[data-testid=run]
+      meaning: click inside the visible browser module through the host automation bridge
+    - command: clibase project action run --project proj-bridge-lab --action mcp.tool.call --target attach-mcp-playwright-docs-01 --tool browser.automation.extract-text --module mod-browser-docs-01
+      meaning: call the attached Playwright MCP through the same project control plane
+  rules:
+    - the terminal is only one place where these commands may be typed
+    - the commands remain valid from any approved cli surface, not only the embedded terminal
+
+decision_summary:
+  strict_product_requirement:
+    - terminal-originated commands are allowed only when they control the currently visible browser surface through the control plane
+    - Playwright MCP can participate as an attached controller surface
+    - stock Playwright MCP must not be assumed to control the exact visible WebContentsView without a host automation bridge
+    - separate-browser automation does not satisfy the main product requirement

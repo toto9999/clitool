@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>프로젝트 관리</title>
+    <link rel="stylesheet" href="./workspace-ui.css" />
+  </head>
+  <body>
+    <main class="page" aria-label="프로젝트 관리">
+      <section id="manager-home" class="manager-home" aria-label="프로젝트 목록 페이지">
+        <div class="manager-shell">
+          <aside class="manager-sidebar">
+            <div class="sidebar-block">
+              <p class="sidebar-kicker">Project Hub</p>
+              <strong class="sidebar-title">Global Repository</strong>
+            </div>
+
+            <nav class="hub-nav" aria-label="프로젝트 분류">
+              <button type="button" class="hub-nav-item is-active">Favorites</button>
+              <button type="button" class="hub-nav-item">Active</button>
+              <button type="button" class="hub-nav-item">Archived</button>
+            </nav>
+
+            <div class="sidebar-block">
+              <p class="sidebar-kicker">Recent Team Activity</p>
+              <div id="recent-activity" class="activity-list" aria-live="polite"></div>
+            </div>
+          </aside>
+
+          <section class="manager-content">
+            <header class="manager-topbar">
+              <div class="brand-block">
+                <span class="brand-mark">KINETIC</span>
+                <span class="brand-sub">INTELLIGENCE</span>
+              </div>
+              <div class="topbar-crumbs">
+                <span>Management</span>
+                <span id="topbar-project-name">Project Hub</span>
+                <span>Edit</span>
+              </div>
+              <div class="topbar-tools">
+                <label class="search-box">
+                  <span class="search-icon">S</span>
+                  <input id="project-search" type="text" placeholder="Search projects..." autocomplete="off" />
+                </label>
+                <button type="button" class="topbar-icon" aria-label="notifications">!</button>
+                <button type="button" class="topbar-icon" aria-label="help">?</button>
+              </div>
+            </header>
+
+            <section class="hero-panel">
+              <div class="hero-copy">
+                <h1>Project Management</h1>
+                <p>프로젝트 레이아웃과 탭 구조를 설계하는 관리 허브입니다.</p>
+              </div>
+              <div class="hero-actions">
+                <div class="hero-meta">
+                  <span class="meta-chip"><strong id="project-count">0</strong> Projects</span>
+                  <span class="meta-chip"><strong id="live-count">0</strong> Live</span>
+                </div>
+                <button id="open-create-modal" type="button" class="create-btn">Create New Project</button>
+              </div>
+            </section>
+
+            <section class="project-grid-shell">
+              <div id="project-collection" class="project-grid" aria-live="polite"></div>
+            </section>
+          </section>
+        </div>
+      </section>
+
+      <section id="project-detail" class="project-detail" aria-label="프로젝트 설정 페이지" hidden>
+        <header class="detail-header">
+          <div class="detail-leading">
+            <button id="back-to-home" type="button" class="secondary-btn secondary-btn--ghost">
+              Project Management
+            </button>
+            <div class="detail-copy">
+              <p class="eyebrow">Settings</p>
+              <h2 id="detail-project-name">-</h2>
+              <p id="detail-project-meta" class="detail-meta">-</p>
+            </div>
+          </div>
+          <div class="detail-actions">
+            <button id="open-selected-btn" type="button" class="create-btn create-btn--small">Open Workspace</button>
+          </div>
+        </header>
+
+        <div class="detail-grid">
+          <aside class="detail-sidebar">
+            <section class="pane-card">
+              <div class="pane-head">
+                <h3>기본 정보</h3>
+              </div>
+              <div class="field-stack">
+                <label class="field">
+                  <span>이름</span>
+                  <input id="f-name" type="text" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>루트 경로</span>
+                  <input id="f-path" type="text" autocomplete="off" />
+                </label>
+              </div>
+              <div class="action-row">
+                <button id="save-btn" type="button" class="primary-btn">저장</button>
+                <button id="delete-btn" type="button" class="danger-btn">삭제</button>
+              </div>
+            </section>
+
+            <section class="pane-card">
+              <div class="pane-head">
+                <h3>탭 구조</h3>
+              </div>
+              <div id="designer-tab-rail" class="designer-tab-rail" aria-label="프로젝트 탭 구조"></div>
+              <div class="tab-summary">
+                <span class="section-kicker">Selected Tab</span>
+                <strong id="tab-summary-title">-</strong>
+                <p id="tab-summary-copy">-</p>
+              </div>
+            </section>
+
+            <section class="pane-card pane-card--compact">
+              <div class="pane-head">
+                <h3>런타임 구조</h3>
+              </div>
+              <div class="runtime-map">
+                <span class="runtime-pill">프로젝트 레일</span>
+                <span id="shell-tab-chip" class="runtime-pill">탭 레일</span>
+                <span id="detail-layout-meta" class="runtime-pill">레이아웃</span>
+              </div>
+              <p id="shell-canvas-caption" class="panel-note">
+                선택한 탭의 레이아웃이 실제 작업 화면 배치를 결정합니다.
+              </p>
+            </section>
+          </aside>
+
+          <section class="detail-main">
+            <section class="pane-card">
+              <div class="pane-head">
+                <h3>레이아웃</h3>
+                <span class="pane-meta">selected tab</span>
+              </div>
+              <div id="layout-gallery" class="layout-gallery" aria-label="레이아웃 템플릿"></div>
+              <div id="layout-preview" class="layout-preview" aria-label="레이아웃 미리보기"></div>
+            </section>
+
+            <section class="pane-card">
+              <div class="pane-head">
+                <h3>모듈 자리</h3>
+                <span class="pane-meta">wireframe</span>
+              </div>
+              <div id="module-wireframe" class="module-wireframe" aria-live="polite"></div>
+            </section>
+
+            <section class="pane-card">
+              <div class="pane-head">
+                <h3>UI / 동작 자리</h3>
+                <span class="pane-meta">wireframe</span>
+              </div>
+              <div class="setting-grid">
+                <div class="setting-column">
+                  <span class="section-kicker">UI</span>
+                  <div id="ui-setting-grid" class="setting-list"></div>
+                </div>
+                <div class="setting-column">
+                  <span class="section-kicker">Behavior</span>
+                  <div id="behavior-setting-grid" class="setting-list"></div>
+                </div>
+              </div>
+            </section>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <div id="create-modal" class="modal-backdrop" hidden aria-hidden="true">
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="create-modal-title">
+        <header class="modal-head">
+          <div>
+            <p class="eyebrow">Create Project</p>
+            <h2 id="create-modal-title">프로젝트 생성</h2>
+          </div>
+          <button id="close-create-modal" type="button" class="icon-btn" aria-label="생성 모달 닫기">x</button>
+        </header>
+
+        <div class="field-stack">
+          <label class="field">
+            <span>프로젝트 이름</span>
+            <input id="new-project-name" type="text" autocomplete="off" placeholder="예: QA Workspace" />
+          </label>
+          <label class="field">
+            <span>루트 경로</span>
+            <input id="new-project-path" type="text" autocomplete="off" />
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button id="cancel-create-modal" type="button" class="secondary-btn">취소</button>
+          <button id="create-project" type="button" class="primary-btn">생성 후 편집</button>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="./workspace-ui.js"></script>
+  </body>
+</html>

@@ -1,0 +1,276 @@
+version: 0.1.0
+
+template_scope:
+  purpose: >
+    Provide concrete starter templates for workspace/auth-providers.yaml so
+    auth provider setup begins from reviewed yaml patterns instead of ad-hoc
+    per-module configuration.
+  status: draft-authoritative
+  extends:
+    - doc/3. Platform/05-system-contracts.yaml
+    - doc/3. Platform/07-control-plane-and-observability.yaml
+    - doc/3. Platform/10-browser-terminal-and-ide-foundation.yaml
+
+template_principles:
+  - auth provider registration is workspace-owned, not hidden in module settings
+  - every provider uses readable keys and labeled scope sets
+  - secrets are referenced by secret_ref fields, never embedded inline
+  - sensitive providers default to system-browser flows
+  - callback routes and redirect uris must be reviewable before implementation
+  - examples are starting points and must be adapted per provider policy
+
+workspace_auth_providers_yaml_template:
+  file_path: workspace/auth-providers.yaml
+  top_level_shape:
+    providers:
+      - auth_provider_key: auth-google-workspace
+        display_name: Google Workspace Login
+        provider_class: google-oauth
+        auth_protocol: oidc-authorization-code-pkce
+        client_mode: public-native-app
+        default_surface_policy: system-browser-required
+        callback_modes:
+          - mode_key: loopback
+            redirect_uri_label: loopback-localhost-41523
+            redirect_uri: http://127.0.0.1:41523/oauth/callback
+            default_for_provider: true
+          - mode_key: custom-protocol
+            redirect_uri_label: clibase-deeplink
+            redirect_uri: clibase://auth/callback
+            default_for_provider: false
+        requested_scope_sets:
+          - scope_set_key: scopes-google-basic
+            scope_labels:
+              - openid
+              - profile
+              - email
+            sensitivity_class: standard-identity
+            default_for_project_selection: true
+          - scope_set_key: scopes-google-drive-readonly
+            scope_labels:
+              - openid
+              - profile
+              - email
+              - drive.readonly
+            sensitivity_class: elevated-data-access
+            default_for_project_selection: false
+        token_storage_policy_key: policy-token-host-secret-store
+        audit_policy_key: policy-auth-redacted
+        provider_policy_notes:
+          - embedded user-agent login is not the default path
+          - elevated scopes require explicit project policy review
+        allowed_projects:
+          - proj-bridge-lab
+        secret_refs:
+          client_id_ref: secret-google-workspace-client-id
+        registration_metadata:
+          issuer_url: https://accounts.google.com
+          discovery_document_url: https://accounts.google.com/.well-known/openid-configuration
+          registered_redirect_labels:
+            - loopback-localhost-41523
+            - clibase-deeplink
+      - auth_provider_key: auth-github-standard
+        display_name: GitHub Standard OAuth
+        provider_class: generic-native-oauth
+        auth_protocol: oauth-authorization-code-pkce
+        client_mode: public-native-app
+        default_surface_policy: system-browser-required
+        callback_modes:
+          - mode_key: custom-protocol
+            redirect_uri_label: clibase-github
+            redirect_uri: clibase://auth/callback
+            default_for_provider: true
+        requested_scope_sets:
+          - scope_set_key: scopes-github-basic
+            scope_labels:
+              - read:user
+              - user:email
+            sensitivity_class: standard-identity
+            default_for_project_selection: true
+          - scope_set_key: scopes-github-repo-read
+            scope_labels:
+              - read:user
+              - user:email
+              - repo:status
+              - public_repo
+            sensitivity_class: elevated-repository-access
+            default_for_project_selection: false
+        token_storage_policy_key: policy-token-host-secret-store
+        audit_policy_key: policy-auth-redacted
+        provider_policy_notes:
+          - use as baseline for third-party native OAuth providers that support PKCE
+        allowed_projects:
+          - proj-bridge-lab
+          - proj-docs-studio
+        secret_refs:
+          client_id_ref: secret-github-standard-client-id
+      - auth_provider_key: auth-enterprise-contoso
+        display_name: Contoso Enterprise SSO
+        provider_class: enterprise-sso-browser-redirect
+        auth_protocol: oidc-browser-redirect
+        client_mode: enterprise-managed-native-app
+        default_surface_policy: system-browser-required
+        callback_modes:
+          - mode_key: loopback
+            redirect_uri_label: enterprise-loopback-42117
+            redirect_uri: http://127.0.0.1:42117/oauth/callback
+            default_for_provider: true
+          - mode_key: post-login-manual-confirmation
+            redirect_uri_label: enterprise-manual-confirm
+            redirect_uri: none
+            default_for_provider: false
+        requested_scope_sets:
+          - scope_set_key: scopes-contoso-sso-basic
+            scope_labels:
+              - openid
+              - profile
+              - offline_access
+            sensitivity_class: enterprise-identity
+            default_for_project_selection: true
+        token_storage_policy_key: policy-token-host-secret-store
+        audit_policy_key: policy-auth-redacted
+        provider_policy_notes:
+          - conditional access and enterprise certificate requirements may force full system-browser trust
+          - manual confirmation is only an enterprise fallback, not a convenience shortcut
+        allowed_projects:
+          - proj-enterprise-admin
+        secret_refs:
+          client_id_ref: secret-contoso-native-client-id
+          tenant_id_ref: secret-contoso-tenant-id
+      - auth_provider_key: auth-azure-device-code
+        display_name: Azure Device Code Login
+        provider_class: device-code
+        auth_protocol: oauth-device-code
+        client_mode: public-native-app
+        default_surface_policy: no-embedded-login-page
+        callback_modes:
+          - mode_key: user-code-entry
+            redirect_uri_label: device-code-user-entry
+            redirect_uri: none
+            default_for_provider: true
+          - mode_key: polling-session
+            redirect_uri_label: device-code-polling
+            redirect_uri: none
+            default_for_provider: false
+        requested_scope_sets:
+          - scope_set_key: scopes-azure-basic
+            scope_labels:
+              - user.read
+            sensitivity_class: standard-identity
+            default_for_project_selection: true
+        token_storage_policy_key: policy-token-host-secret-store
+        audit_policy_key: policy-auth-redacted
+        provider_policy_notes:
+          - use when browser redirect is unavailable or unsupported in the target environment
+        allowed_projects:
+          - proj-ops-console
+        secret_refs:
+          client_id_ref: secret-azure-device-client-id
+      - auth_provider_key: auth-openai-api-key
+        display_name: OpenAI API Key
+        provider_class: manual-secret-entry
+        auth_protocol: api-key
+        client_mode: host-secret-entry
+        default_surface_policy: no-browser-required
+        callback_modes:
+          - mode_key: none
+            redirect_uri_label: no-callback
+            redirect_uri: none
+            default_for_provider: true
+        requested_scope_sets:
+          - scope_set_key: scopes-openai-api-basic
+            scope_labels:
+              - api.invoke
+            sensitivity_class: direct-secret-entry
+            default_for_project_selection: true
+        token_storage_policy_key: policy-token-host-secret-store
+        audit_policy_key: policy-auth-redacted
+        provider_policy_notes:
+          - secret entry must be handled by host-managed secure input ui only
+        allowed_projects:
+          - proj-ai-lab
+      - auth_provider_key: auth-local-dev-mock
+        display_name: Local Mock Auth
+        provider_class: local-dev-mock-auth
+        auth_protocol: local-mock-oauth
+        client_mode: local-development-only
+        default_surface_policy: embedded-or-system-browser-by-policy
+        callback_modes:
+          - mode_key: embedded-dev-only
+            redirect_uri_label: embedded-dev-callback
+            redirect_uri: http://127.0.0.1:43111/mock/callback
+            default_for_provider: false
+          - mode_key: loopback
+            redirect_uri_label: mock-loopback-43111
+            redirect_uri: http://127.0.0.1:43111/oauth/callback
+            default_for_provider: true
+        requested_scope_sets:
+          - scope_set_key: scopes-mock-basic
+            scope_labels:
+              - openid
+              - profile
+            sensitivity_class: local-test-only
+            default_for_project_selection: true
+        token_storage_policy_key: policy-token-host-secret-store
+        audit_policy_key: policy-auth-redacted
+        provider_policy_notes:
+          - never reuse this provider key for staging or production
+          - embedded-dev-only exists strictly for local development diagnostics
+        allowed_projects:
+          - proj-auth-lab
+
+field_guidance:
+  auth_provider_key:
+    rule: use a readable provider-and-purpose key
+    examples:
+      - auth-google-workspace
+      - auth-github-standard
+      - auth-enterprise-contoso
+  default_surface_policy:
+    allowed_values:
+      - system-browser-required
+      - no-embedded-login-page
+      - no-browser-required
+      - embedded-or-system-browser-by-policy
+    rule: choose the safest default that matches provider policy
+  sensitivity_class:
+    examples:
+      - standard-identity
+      - elevated-data-access
+      - enterprise-identity
+      - direct-secret-entry
+      - local-test-only
+    rule: classify by meaning so policy and audit layers can reason about risk
+  secret_refs:
+    rule: reference client ids, tenant ids, and similar registration secrets by name only
+    forbidden:
+      - inline client secret
+      - inline refresh token
+      - inline access token
+
+project_selection_examples:
+  attachments_yaml_fragment:
+    project_key: proj-bridge-lab
+    auth_provider_selections:
+      - selection_key: authsel-google-basic-01
+        auth_provider_key: auth-google-workspace
+        scope_set_key: scopes-google-basic
+        default_for_project: true
+      - selection_key: authsel-github-basic-01
+        auth_provider_key: auth-github-standard
+        scope_set_key: scopes-github-basic
+        default_for_project: false
+
+review_checklist:
+  before_enablement:
+    - provider class is chosen and matches official provider guidance
+    - callback mode is declared and reviewable
+    - redirect uri labels are registered and human-readable
+    - scope sets are labeled by business meaning
+    - token storage policy uses host secret storage
+    - logs redact token-bearing values
+    - production and local-dev provider keys are not mixed
+  before_implementation:
+    - auth-providers.yaml is committed before module code starts using the provider
+    - the chosen provider appears in project policy or attachment configuration
+    - callback route ownership is assigned to host auth service

@@ -1,0 +1,115 @@
+version: 0.1.0
+
+document:
+  key: build-packaging-and-update
+  status: active
+  purpose: >
+    Define how the desktop product is built, packaged, signed, released, and
+    updated so native dependencies, update expectations, and release channels
+    are decided before implementation spreads.
+  extends:
+    - doc/3. Platform/04-runtime-platform-plan.md
+    - doc/3. Platform/10-browser-terminal-and-ide-foundation.yaml
+    - doc/3. Platform/20-secret-and-credential-management.yaml
+
+decision-summary:
+  - preferred packaging toolchain is Electron Forge
+  - code signing is required for distributable Windows and macOS releases
+  - native module rebuild verification is mandatory because node-pty is in the target stack
+  - release channels are dev, beta, and stable
+  - built-in auto update is not assumed for Linux
+  - update rollout starts only after signed packaging and installer smoke tests are stable
+
+build-profiles:
+  local-dev:
+    purpose: developer inner loop
+    traits:
+      - fast rebuild
+      - unsigned
+      - debug logging allowed
+  ci-package:
+    purpose: deterministic package generation and smoke validation
+    traits:
+      - reproducible dependency install
+      - native module rebuild checks
+      - unsigned or test-signed artifacts depending on environment
+  release-candidate:
+    purpose: pre-production verification artifact
+    traits:
+      - channel-tagged
+      - signed where supported
+      - installer and startup smoke tests required
+  stable-release:
+    purpose: end-user distribution
+    traits:
+      - signed
+      - channel manifest published
+      - release notes and rollback metadata present
+
+tooling-direction:
+  preferred-build-tool: Electron Forge
+  reasons:
+    - Electron packaging docs recommend Forge as the preferred specialized tooling
+    - Forge aligns with official packaging, signing, and maker workflows
+  native-module-policy:
+    - node-pty and any future native module must be rebuilt and smoke-tested for each target platform
+    - packaged artifacts are blocked if native dependency loading fails
+
+release-channels:
+  - dev
+  - beta
+  - stable
+
+artifact-classes:
+  - unpackaged-debug
+  - packaged-app
+  - installer
+  - signed-release
+  - update-manifest
+
+platform-policy:
+  windows:
+    priority: primary
+    requirements:
+      - signed installer for production distribution
+      - first-run and update smoke verification
+  macos:
+    priority: secondary
+    requirements:
+      - code signing
+      - notarization before stable release
+  linux:
+    priority: later
+    requirements:
+      - packaged artifact support
+      - no assumption of built-in Electron autoUpdater
+      - prefer explicit package-manager or manual distribution strategy
+
+update-policy:
+  defaults:
+    - dev channel may use manual install only
+    - beta can use controlled update feeds after packaging stabilizes
+    - stable update rollout requires signed release artifacts and rollback metadata
+  rules:
+    - do not enable in-app auto update before installer and signing paths are stable
+    - update checks must respect platform limitations and installer requirements
+    - Linux should not rely on Electron's built-in autoUpdater as a cross-platform solution
+
+release-ops:
+  required-metadata:
+    - version
+    - channel
+    - build_commit
+    - artifact_hashes
+    - release_notes_reference
+    - rollback_reference
+  rollback-policy:
+    - keep previous stable installer and manifest metadata available
+    - rollback should not require rewriting project data formats when avoidable
+
+references:
+  electron:
+    - https://www.electronjs.org/docs/latest/tutorial/distribution-overview
+    - https://www.electronjs.org/docs/tutorial/application-distribution/
+    - https://www.electronjs.org/docs/latest/tutorial/code-signing
+    - https://www.electronjs.org/docs/latest/api/auto-updater

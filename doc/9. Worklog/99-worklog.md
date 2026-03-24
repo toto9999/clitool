@@ -1,0 +1,52 @@
+# Worklog
+
+- 2026-03-23: 프로젝트 루트를 `ref/basic_reference` 기반의 `Vite + React` 셸로 재구성하고, 기존 CLI 중심 파일과 문서를 정리한 뒤 `doc/` 체계를 새로 만들었다.
+- 2026-03-23: 사용자 피드백에 맞춰 `SSOT/DDD/workflow` 강제 체계를 프로젝트 운영 원칙으로 복원하고, 새 루트 구조 기준 문서를 다시 정리했다.
+- 2026-03-23: 현재 루트 기준으로 동작하는 최소 `batcli workflow` 및 `docs validate/touch` CLI를 다시 연결했다.
+- 2026-03-23 17:02:08 | verified governance reconnect CLI
+- 2026-03-23: 웹앱 단독 구조의 한계를 정리하고, Electron 기반 데스크톱 셸과 터미널/브라우저/모듈 버스 기반작업 계획을 `04-runtime-platform-plan.md`에 추가했다.
+- 2026-03-23: YAML 우선, readable key, no-UUID 원칙에 맞춰 저장 구조/모듈 추가 흐름/메시지 계약을 `05-system-contracts.yaml`로 고정했다.
+- 2026-03-23 17:15:36 | finalized yaml system contracts for storage keys and module bus
+- 2026-03-23 17:21:28 | reorganized docs into numbered category folders
+- 2026-03-23: 새 모듈이 들어와도 범용적으로 확장되도록 capability, lifecycle, adapter, ack/error/retry, schema version 규칙을 `06-module-sdk.yaml`로 고정했다.
+- 2026-03-23: 글로벌 CLI -> 프로젝트 CLI -> 탭/모듈 CLI override 상속 규약과 CLI-aware module 규칙을 문서에 추가했다.
+- 2026-03-23 17:33:01 | added module sdk contract for extensible module lifecycle capabilities and ack rules
+- 2026-03-23 17:36:16 | added global-to-project cli inheritance storage contract
+- 2026-03-23 17:44:31 | documented project cli inheritance and cli-aware module rules
+- 2026-03-23: GUI, Global CLI, Project CLI, Skill, MCP가 같은 action catalog와 log pipeline을 쓰도록 `07-control-plane-and-observability.yaml`을 추가하고 관련 문서를 연결했다.
+- 2026-03-23 17:52:20 | locked unified control plane, project attachments, and yaml observability contract
+- 2026-03-23: 다언어 외부 패키지의 runner/transport/observability tier와 조용한 라이브러리의 synthetic lifecycle logging 규약을 `08-external-module-runtime.yaml`로 고정했다.
+- 2026-03-23 18:06:13 | standardized external package runtime, observability tiers, and synthetic lifecycle logging
+- 2026-03-23: AI가 모듈을 제대로 선택하고 추천 연결할 수 있도록 semantic description, capability tag, example I/O, usage hint, binding policy 규약을 `09-ai-usable-module-manifest.yaml`로 고정했다.
+- 2026-03-23 18:42:00 | locked ai-usable module manifests, capability tags, examples, and binding policy contract
+- 2026-03-24: 브라우저 보안 경계, 브라우저 로그/통신, 터미널, 다언어 실행, 패키지 설치, IDE 유사 환경의 도구 선택을 `10-browser-terminal-and-ide-foundation.yaml`로 고정했다.
+- 2026-03-24: OAuth, Google 로그인, 민감 인증 플로우는 시스템 브라우저와 host-managed callback/PKCE를 우선하도록 문서에 추가했다.
+- 2026-03-24: auth provider class, callback mode, auth-session state, redacted audit 규약을 세분화해 문서에 반영했다.
+- 2026-03-24: workspace/auth-providers.yaml 시작용 템플릿과 provider 예시를 문서로 추가했다.
+- 2026-03-24: Playwright MCP와 terminal-originated browser automation을 같은 control plane으로 묶는 계약 문서를 추가했다.
+- 2026-03-24: browser automation은 새 브라우저가 아니라 현재 보이는 WebContentsView 제어를 기준으로 다시 고정했다.
+- 2026-03-24: 일반 browsing surface와 full automation surface의 차이, debugger/CDP 기반 전제조건을 문서에 명시했다.
+- 2026-03-24: workspace gateway, one-project-one-ingress-port, channel/domain/Caddy routing 계약을 문서로 추가했다.
+- 2026-03-24: 제품 방향을 CLI-first automation workbench로 고정하고, 핵심 사용자 시나리오와 프로젝트 운영 모델 문서를 추가했다.
+- 2026-03-24: 전체 아키텍처를 중앙화한 master document를 추가하고, 구조 변경 시 이 문서를 먼저 갱신하도록 governance를 수정했다.
+- 2026-03-24 07:50:36 | locked browser security, browser logs, terminal strategy, and ide-like foundation choices
+- 2026-03-24 07:58:56 | confirmed auth-sensitive browser policy and callback handling docs
+- 2026-03-24 08:51:50 | detailed auth provider matrix and callback policy
+- 2026-03-24 08:58:37 | added auth providers registry template examples
+- 2026-03-24 09:03:41 | added browser automation and playwright mcp contract
+- 2026-03-24 09:08:07 | tightened browser automation to visible WebContentsView only
+- 2026-03-24 09:09:33 | documented browser automation backend preconditions
+- 2026-03-24 09:14:05 | added channel domain ingress port and caddy routing contract
+- 2026-03-24 09:25:25 | locked cli first product direction and operating model
+- 2026-03-24 09:31:37 | centralized whole architecture into one master document
+- 2026-03-24 09:35:11 | upgraded central architecture doc with code tree and flowcharts
+- 2026-03-24 09:43:07 | annotated code tree in central architecture doc
+- 2026-03-24: Global CLI를 Textual 기반 interactive host로 고정하고, `ref/` reference CLI 활용 방향과 멀티라인/링크/이미지 붙여넣기 요구를 초기안으로 문서화했다.
+- 2026-03-24: `ref/`의 업스트림 CLI는 adapter로 연결하지 않고 분석/착안용 기준으로만 두며, 제품 코드는 별도로 재구현한다는 방향으로 문서를 수정했다.
+- 2026-03-24: 상태 구조, structural sharing, shallow reference 안정성, cache 계층, renderer backpressure 기준을 `19-performance-and-optimization-policy.yaml`로 문서화했다.
+- 2026-03-24: secret/permission/packaging/release-gate/source-trust 운영 문서를 추가해 구현 전 운영 리스크 기준을 보강했다.
+- 2026-03-24 10:03:45 | documented textual global cli foundation and ref library reuse
+- 2026-03-24 10:07:41 | revised ref libraries to analysis-only and owned reimplementation policy
+- 2026-03-24 10:14:10 | documented performance optimization policy for state references caches and backpressure
+- 2026-03-24 10:19:20 | reset src to minimal renderer bootstrap and removed old mock workspace ui
+- 2026-03-24 10:26:36 | added missing ops docs for secrets permissions packaging release gates and source trust

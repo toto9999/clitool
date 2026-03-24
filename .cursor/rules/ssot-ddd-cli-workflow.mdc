@@ -1,0 +1,74 @@
+---
+description: Current SSOT/DDD/central-architecture and batcli workflow enforcement for clibase.
+globs: "**"
+alwaysApply: true
+---
+
+# SSOT / DDD / ARCHITECTURE / CLI WORKFLOW
+
+이 프로젝트에서 모든 기능 추가, 변경, 리팩터는 아래 순서를 반드시 따른다.
+
+## 0. First Action
+
+- First run `batcli workflow start "summary"` in the terminal.
+- Then update documents, run `batcli docs validate`, move to code phase, and implement.
+- Do not change code before documents are updated.
+
+## 0.5 Read Order
+
+- Read these first:
+  - `doc/0. Governance/ssot.yaml`
+  - `doc/0. Governance/ddd.md`
+  - `doc/0. Governance/workflow-rules.md`
+  - `doc/1. Strategy/14-product-direction.md`
+  - `doc/1. Strategy/16-project-operating-model.md`
+  - `doc/1. Strategy/03-rebuild-roadmap.md`
+  - `doc/3. Platform/17-central-architecture.md`
+- If the task touches a detailed subsystem, read the matching platform contract document before coding.
+
+## 1. Code First Is Forbidden
+
+- Do not jump straight into code for feature, structure, or UX changes.
+- Follow document phase first, then move to code phase.
+
+## 2. Required Workflow
+
+1. Start workflow in doc phase:
+   `batcli workflow start "one line summary"`
+
+2. Update documents:
+   - `doc/0. Governance/ssot.yaml`
+   - `doc/0. Governance/ddd.md`
+   - `doc/0. Governance/workflow-rules.md`
+   - related strategy, product, and platform documents
+   - `doc/3. Platform/17-central-architecture.md` first when architecture or current code map changes
+
+3. Validate documents:
+   `batcli docs validate`
+
+4. Move to code phase:
+   `batcli workflow to-code`
+
+5. Implement code to match current documents.
+
+6. If scope changes, go back to doc phase:
+   `batcli workflow to-doc`
+
+7. Record worklog before finishing:
+   `batcli docs touch "summary"`
+
+8. Stop workflow:
+   `batcli workflow stop`
+
+## 3. Important Notes
+
+- Use the terminal for actual `batcli` commands.
+- Check current state with `batcli workflow status`.
+- Do not use outdated paths such as old `doc/0. plan` or `doc/0. SSOT_DDD`.
+- Current authoritative architecture map is `doc/3. Platform/17-central-architecture.md`.
+
+## 4. Summary
+
+- No code-first changes.
+- Always: workflow start -> docs update -> docs validate -> to-code -> implement -> docs touch -> workflow stop.
+- Architecture or code-tree changes must update `17-central-architecture.md` first.

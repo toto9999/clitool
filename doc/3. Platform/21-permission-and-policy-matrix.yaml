@@ -1,0 +1,192 @@
+version: 0.1.0
+
+document:
+  key: permission-and-policy-matrix
+  status: active
+  purpose: >
+    Define which control surfaces may perform which classes of actions, and
+    whether those actions are allowed, require confirmation, or are denied by
+    default.
+  extends:
+    - doc/3. Platform/07-control-plane-and-observability.yaml
+    - doc/3. Platform/10-browser-terminal-and-ide-foundation.yaml
+    - doc/3. Platform/12-browser-automation-and-playwright-mcp.yaml
+
+decision-summary:
+  - no control surface gets implicit superuser access
+  - GUI, CLI, AI, Skill, and MCP all pass through the same policy engine
+  - destructive, public-exposure, auth-sensitive, and install-time actions require explicit policy
+  - production defaults are deny or confirm for high-risk actions, never silent allow
+
+decision-levels:
+  - allow
+  - confirm
+  - deny
+  - dev-only
+
+actors:
+  - gui
+  - global-cli
+  - project-cli
+  - ai
+  - skill
+  - mcp
+  - release-automation
+
+permission-classes:
+  - project.read-config
+  - project.write-config
+  - file.read-project
+  - file.write-project
+  - file.delete-project
+  - process.spawn-terminal
+  - process.spawn-external-runtime
+  - package.install-project-runtime
+  - network.outbound-general
+  - browser.navigate
+  - browser.automation-control
+  - auth.start-external-flow
+  - auth.exchange-token
+  - ingress.publish-channel
+  - release.build-package
+  - release.sign-artifact
+  - release.publish-update
+
+matrix:
+  gui:
+    project.read-config: allow
+    project.write-config: allow
+    file.read-project: allow
+    file.write-project: allow
+    file.delete-project: confirm
+    process.spawn-terminal: allow
+    process.spawn-external-runtime: confirm
+    package.install-project-runtime: confirm
+    network.outbound-general: confirm
+    browser.navigate: allow
+    browser.automation-control: confirm
+    auth.start-external-flow: allow
+    auth.exchange-token: allow
+    ingress.publish-channel: confirm
+    release.build-package: deny
+    release.sign-artifact: deny
+    release.publish-update: deny
+  global-cli:
+    project.read-config: allow
+    project.write-config: allow
+    file.read-project: allow
+    file.write-project: allow
+    file.delete-project: confirm
+    process.spawn-terminal: allow
+    process.spawn-external-runtime: confirm
+    package.install-project-runtime: confirm
+    network.outbound-general: confirm
+    browser.navigate: allow
+    browser.automation-control: confirm
+    auth.start-external-flow: allow
+    auth.exchange-token: allow
+    ingress.publish-channel: confirm
+    release.build-package: dev-only
+    release.sign-artifact: deny
+    release.publish-update: deny
+  project-cli:
+    project.read-config: allow
+    project.write-config: allow
+    file.read-project: allow
+    file.write-project: allow
+    file.delete-project: confirm
+    process.spawn-terminal: allow
+    process.spawn-external-runtime: confirm
+    package.install-project-runtime: confirm
+    network.outbound-general: confirm
+    browser.navigate: allow
+    browser.automation-control: confirm
+    auth.start-external-flow: allow
+    auth.exchange-token: allow
+    ingress.publish-channel: confirm
+    release.build-package: deny
+    release.sign-artifact: deny
+    release.publish-update: deny
+  ai:
+    project.read-config: allow
+    project.write-config: confirm
+    file.read-project: allow
+    file.write-project: confirm
+    file.delete-project: deny
+    process.spawn-terminal: confirm
+    process.spawn-external-runtime: confirm
+    package.install-project-runtime: deny
+    network.outbound-general: confirm
+    browser.navigate: allow
+    browser.automation-control: confirm
+    auth.start-external-flow: confirm
+    auth.exchange-token: deny
+    ingress.publish-channel: deny
+    release.build-package: deny
+    release.sign-artifact: deny
+    release.publish-update: deny
+  skill:
+    project.read-config: allow
+    project.write-config: confirm
+    file.read-project: allow
+    file.write-project: confirm
+    file.delete-project: deny
+    process.spawn-terminal: confirm
+    process.spawn-external-runtime: confirm
+    package.install-project-runtime: deny
+    network.outbound-general: confirm
+    browser.navigate: allow
+    browser.automation-control: confirm
+    auth.start-external-flow: deny
+    auth.exchange-token: deny
+    ingress.publish-channel: deny
+    release.build-package: deny
+    release.sign-artifact: deny
+    release.publish-update: deny
+  mcp:
+    project.read-config: allow
+    project.write-config: confirm
+    file.read-project: allow
+    file.write-project: confirm
+    file.delete-project: deny
+    process.spawn-terminal: confirm
+    process.spawn-external-runtime: confirm
+    package.install-project-runtime: deny
+    network.outbound-general: confirm
+    browser.navigate: allow
+    browser.automation-control: confirm
+    auth.start-external-flow: deny
+    auth.exchange-token: deny
+    ingress.publish-channel: deny
+    release.build-package: deny
+    release.sign-artifact: deny
+    release.publish-update: deny
+  release-automation:
+    project.read-config: allow
+    project.write-config: deny
+    file.read-project: allow
+    file.write-project: deny
+    file.delete-project: deny
+    process.spawn-terminal: deny
+    process.spawn-external-runtime: allow
+    package.install-project-runtime: allow
+    network.outbound-general: allow
+    browser.navigate: deny
+    browser.automation-control: deny
+    auth.start-external-flow: deny
+    auth.exchange-token: deny
+    ingress.publish-channel: deny
+    release.build-package: allow
+    release.sign-artifact: allow
+    release.publish-update: confirm
+
+policy-engine-rules:
+  - project policy may tighten defaults but should not silently widen a denied class without explicit reviewed configuration
+  - auth token exchange and signing operations stay host-owned even when a higher-level actor initiates them
+  - AI, Skill, and MCP may suggest denied actions, but execution remains blocked until a higher-authority confirmed path is used
+  - confirmation prompts must include actor, target, scope, and risk reason
+
+non-negotiables:
+  - no direct renderer bypass around the policy engine
+  - no hidden allow path for package installation or browser automation
+  - no release-signing access from project-facing automation surfaces

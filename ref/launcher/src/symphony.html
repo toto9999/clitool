@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Symphony Settings</title>
+    <link rel="stylesheet" href="./symphony.css" />
+  </head>
+  <body>
+    <div class="sym-root">
+
+      <!-- Header -->
+      <header class="sym-header">
+        <div class="sym-title">
+          <svg class="sym-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12" />
+          </svg>
+          <span class="sym-name">Symphony</span>
+          <span id="status-badge" class="status-badge status-stopped" aria-live="polite">Stopped</span>
+        </div>
+        <div class="sym-controls">
+          <button id="btn-start" class="ctrl-btn ctrl-start" type="button">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+            Start
+          </button>
+          <button id="btn-stop" class="ctrl-btn ctrl-stop" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+            Stop
+          </button>
+          <button id="btn-restart" class="ctrl-btn ctrl-restart" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            Restart
+          </button>
+        </div>
+      </header>
+
+      <!-- Body -->
+      <div class="sym-body">
+
+        <!-- Skills -->
+        <section class="sym-section" aria-labelledby="section-skills-title">
+          <div class="section-head">
+            <h2 id="section-skills-title" class="section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+              Skills
+            </h2>
+            <button id="add-skill-btn" class="add-btn" type="button">+ Add Skill</button>
+          </div>
+
+          <div id="form-skill" class="add-form" hidden>
+            <div class="form-row">
+              <input id="skill-name" class="form-input" type="text" placeholder="Name (e.g. claude-skill)" autocomplete="off" />
+            </div>
+            <div class="form-row">
+              <input id="skill-path" class="form-input" type="text" placeholder="Path or URL" autocomplete="off" />
+            </div>
+            <div class="form-row">
+              <input id="skill-desc" class="form-input" type="text" placeholder="Description (optional)" autocomplete="off" />
+            </div>
+            <div class="form-actions">
+              <button id="skill-submit" class="form-btn-primary" type="button">Add</button>
+              <button id="skill-cancel" class="form-btn-secondary" type="button">Cancel</button>
+            </div>
+          </div>
+
+          <ul id="list-skills" class="item-list" aria-label="skills"></ul>
+          <p id="empty-skills" class="empty-hint">No skills configured.</p>
+        </section>
+
+        <!-- MCP Servers -->
+        <section class="sym-section" aria-labelledby="section-mcp-title">
+          <div class="section-head">
+            <h2 id="section-mcp-title" class="section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+              MCP Servers
+            </h2>
+            <button id="add-mcp-btn" class="add-btn" type="button">+ Add Server</button>
+          </div>
+
+          <div id="form-mcp" class="add-form" hidden>
+            <div class="form-row">
+              <input id="mcp-name" class="form-input" type="text" placeholder="Name (e.g. filesystem)" autocomplete="off" />
+            </div>
+            <div class="form-row">
+              <input id="mcp-command" class="form-input" type="text" placeholder="Command (e.g. npx)" autocomplete="off" />
+            </div>
+            <div class="form-row">
+              <input id="mcp-args" class="form-input" type="text" placeholder="Args (space-separated, e.g. -y @modelcontextprotocol/server-filesystem /)" autocomplete="off" />
+            </div>
+            <div class="form-actions">
+              <button id="mcp-submit" class="form-btn-primary" type="button">Add</button>
+              <button id="mcp-cancel" class="form-btn-secondary" type="button">Cancel</button>
+            </div>
+          </div>
+
+          <ul id="list-mcp" class="item-list" aria-label="MCP servers"></ul>
+          <p id="empty-mcp" class="empty-hint">No MCP servers configured.</p>
+        </section>
+
+        <!-- CLI Integration -->
+        <section class="sym-section" aria-labelledby="section-cli-title">
+          <div class="section-head">
+            <h2 id="section-cli-title" class="section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+              CLI Integration
+            </h2>
+          </div>
+
+          <div class="cli-form">
+            <div class="field-row">
+              <label class="field-label" for="cli-port">Bridge Port</label>
+              <input id="cli-port" class="form-input short" type="number" min="1024" max="65535" />
+            </div>
+            <div class="field-row">
+              <label class="field-label" for="auto-start">Auto Start on Launch</label>
+              <label class="toggle-label">
+                <input id="auto-start" type="checkbox" class="toggle-input" />
+                <span class="toggle-track" aria-hidden="true"></span>
+              </label>
+            </div>
+            <div class="field-row">
+              <button id="save-cli" class="form-btn-primary" type="button">Save</button>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+
+    <script type="module" src="./symphonyView.js"></script>
+  </body>
+</html>

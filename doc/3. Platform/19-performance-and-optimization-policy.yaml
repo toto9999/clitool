@@ -1,0 +1,241 @@
+version: 0.1.0
+
+document:
+  key: performance-and-optimization-policy
+  status: active
+  purpose: >
+    Define the default performance strategy for renderer, host, terminal,
+    browser, logs, and project state so optimization is planned as a system
+    design concern instead of added later as scattered local hacks.
+  extends:
+    - doc/1. Strategy/14-product-direction.md
+    - doc/1. Strategy/16-project-operating-model.md
+    - doc/3. Platform/04-runtime-platform-plan.md
+    - doc/3. Platform/05-system-contracts.yaml
+    - doc/3. Platform/17-central-architecture.md
+
+decision-summary:
+  - performance work starts from measurement and architecture boundaries, not blanket memoization
+  - renderer state must prefer flat normalized structures and structural sharing over deep nested copies
+  - hot-path UI updates must preserve shallow reference stability for unchanged slices
+  - caches are allowed only when ownership, invalidation, durability, and size limits are declared
+  - browser, terminal, and log streams must be projected and backpressured before reaching renderer state
+  - main process and control-plane coordinators stay thin; expensive work moves to dedicated services or worker processes
+
+performance-north-star:
+  product-goal: >
+    The app should stay responsive under realistic power-user workloads:
+    large project metadata, many tabs, streaming logs, browser events,
+    terminal output, and AI-driven action orchestration.
+  success-signals:
+    - typing in compose surfaces should remain responsive during background project updates
+    - switching projects or tabs should not require rebuilding unrelated module state
+    - long-running browser, terminal, or external-runtime activity should not flood renderer state
+    - logs and projections should remain analyzable without making the workspace sluggish
+
+measurement-policy:
+  rules:
+    - profile before and after optimizing a hotspot
+    - optimize measured hotspots first, not hypothetical ones
+    - keep security boundaries intact while optimizing
+    - regressions are judged by responsiveness, memory growth, and sustained stream handling, not only bundle size
+  instrumentation-targets:
+    - renderer commit cost
+    - project and tab switch latency
+    - action dispatch acknowledgement latency
+    - log stream throughput and dropped-event counts
+    - browser and terminal snapshot refresh cadence
+    - main-process blocking time
+
+state-design-policy:
+  immutable-state-rules:
+    - treat renderer state as immutable snapshots
+    - never mutate arrays, objects, maps, or sets held in React state in place
+    - update only the changed branch and preserve references for untouched branches
+    - do not deep-clone whole project trees in hot paths
+  structure-rules:
+    - prefer flat normalized maps keyed by readable keys
+    - store selected keys or ids rather than full duplicated objects
+    - avoid redundant derived state that can be recalculated cheaply during render
+    - avoid deeply nested state for project, tab, module, and layout trees
+  complex-update-rules:
+    - use reducers or dedicated state updaters for multi-field transitions
+    - isolate durable project config from volatile view state
+    - isolate raw runtime event streams from renderer-facing projections
+
+reference-and-sharing-policy:
+  shallow-reference-strategy:
+    purpose: >
+      Keep shallow comparison useful at view boundaries by preserving object
+      identity for unchanged data and replacing only changed slices.
+    rules:
+      - if a project update changes one tab, only that tab branch gets a new reference
+      - list items that did not change keep their existing object identity
+      - derived view models must avoid allocating fresh wrapper objects on every render unless necessary
+      - selectors should return stable references when the underlying slice is unchanged
+  when-to-break-reference:
+    - when a field actually changes
+    - when crossing a durability boundary and creating a fresh snapshot is intentional
+    - when sanitizing or normalizing untrusted runtime payloads
+  anti-patterns:
+    - cloning the whole project object for a small field edit
+    - rebuilding large arrays in render without a measured reason
+    - passing freshly allocated inline objects through broad component trees on every render
+    - storing browser snapshots or terminal buffers directly as giant nested React state blobs
+
+renderer-optimization-policy:
+  render-boundaries:
+    - split state by project shell, tab shell, module projection, and transient widget state
+    - keep broad context providers small and stable
+    - do not put rapidly changing stream payloads into top-level app context
+  memoization-policy:
+    default: no blanket memoization
+    rules:
+      - use memoization only around measured hotspots, expensive derivations, or stable provider values
+      - do not add useMemo or useCallback by default to every component
+      - prefer structural sharing and smaller subscriptions before manual memo wrappers
+      - when memoization is used, invalidation boundaries must remain obvious
+  transition-policy:
+    - use startTransition for non-blocking project or tab updates that should not interrupt typing or direct manipulation
+    - use useDeferredValue when a fast-changing input feeds a heavier derived view
+    - do not put controlled text input updates themselves inside a transition
+  list-and-tree-policy:
+    - virtualize large lists, trees, logs, and result tables
+    - paginate or window very large histories rather than rendering the whole set
+    - keep visible-window calculations outside hot render loops when possible
+
+streaming-and-backpressure-policy:
+  principle: >
+    Runtime streams are not renderer state. They become renderer state only
+    after projection, batching, sampling, truncation, or aggregation.
+  terminal:
+    - cap scrollback and keep raw PTY output out of top-level React state
+    - batch renderer updates by chunk or frame, not per character event
+    - keep archival logs separate from visible terminal projection
+  browser:
+    - project navigation, console, selection, and automation state into compact view models
+    - do not mirror the full browser DOM or protocol event stream into renderer state
+  logs:
+    - use append-only buckets for durable logs and ring-buffer projections for live views
+    - define limits for visible rows, retained in-memory entries, and refresh cadence
+    - drop or compact low-value repetitive events when policy allows, but never silently lose audit-critical records
+  external-runtime:
+    - normalize progress events before they reach GUI
+    - synthesized lifecycle events must stay lightweight and bounded
+
+cache-policy:
+  rule: no unnamed cache
+  cache-classes:
+    durable-projection-cache:
+      location: workspace-state/analysis/<project_key>/projection-cache.yaml
+      purpose: rebuildable analysis or summary projections
+      invalidation:
+        - source log bucket changed
+        - schema or projection version changed
+    runtime-memory-cache:
+      purpose: hot in-memory lookup caches for catalogs, manifests, and resolved profiles
+      requirements:
+        - explicit cache key
+        - explicit owner
+        - size or count bound
+        - invalidation or ttl rule
+    browser-session-cache:
+      purpose: browser-owned network and content caching within declared session profiles
+      requirements:
+        - scoped by browser session profile
+        - never treated as durable source of truth
+    ui-derivation-cache:
+      purpose: memoized selectors or computed projections for measured hotspots
+      requirements:
+        - stable input keys
+        - easy invalidation reasoning
+  forbidden:
+    - hidden global caches with no owner
+    - caches that outlive their project scope unintentionally
+    - caches that duplicate durable truth without invalidation rules
+
+host-and-process-policy:
+  main-process:
+    - keep startup work minimal and defer non-essential loading
+    - avoid CPU-heavy or blocking filesystem work on the main process hot path
+    - keep control-plane coordination thin
+  service-processes:
+    - move long-running or heavy work to dedicated services, worker threads, or utility processes where appropriate
+    - browser, terminal, and external-runtime services should expose compact projections rather than raw firehoses
+  startup-policy:
+    - load only what the first user path needs immediately
+    - defer large optional modules, diagnostics, and secondary tooling
+
+module-projection-policy:
+  browser-module:
+    store-in-renderer:
+      - current url
+      - title
+      - loading state
+      - bounded recent events
+      - compact automation status
+    keep-out-of-renderer:
+      - full dom snapshots by default
+      - full devtools protocol traffic
+  terminal-module:
+    store-in-renderer:
+      - bounded visible scrollback projection
+      - session status
+      - exit code
+      - compact last-command metadata
+    keep-out-of-renderer:
+      - unbounded raw PTY history
+  editor-and-logs:
+    - preserve cursor or viewport state separately from large document or log bodies
+    - use lazy loading or chunked loading for heavy files and histories
+
+practical-defaults:
+  renderer:
+    - normalized state maps first
+    - structural sharing first
+    - split contexts first
+    - transitions for non-blocking heavy UI updates
+    - virtualization for large collections
+  host:
+    - lazy startup
+    - thin orchestration
+    - service isolation for heavy tasks
+  logs-and-streams:
+    - ring buffer for live views
+    - append-only durable logs for truth
+    - projection cache for rebuilt summaries
+
+anti-patterns:
+  - deep equality checks in hot render paths as a default strategy
+  - broad context values recreated on every render
+  - duplicating the same project data in many local component states
+  - storing raw terminal or browser firehoses directly in React context
+  - unbounded in-memory caches
+  - optimizing with memo hooks before measuring
+  - hiding performance problems by dropping important audit events silently
+
+implementation-checklist:
+  before-adding-a-cache:
+    - what is the source of truth
+    - who owns invalidation
+    - what is the size bound
+    - can it be rebuilt
+  before-adding-memoization:
+    - what measured hotspot does it fix
+    - can structural sharing or subscription splitting solve it first
+    - what invalidates the memo
+  before-storing-more-state:
+    - is this durable truth, runtime projection, or transient widget state
+    - can this be derived instead of stored
+    - does this create duplication or deep nesting
+
+references:
+  react:
+    - https://react.dev/learn/updating-objects-in-state
+    - https://react.dev/learn/updating-arrays-in-state
+    - https://react.dev/learn/choosing-the-state-structure
+    - https://react.dev/reference/react/memo
+    - https://react.dev/reference/react/useDeferredValue
+    - https://react.dev/reference/react/useTransition
+  electron:
+    - https://www.electronjs.org/docs/latest/tutorial/performance

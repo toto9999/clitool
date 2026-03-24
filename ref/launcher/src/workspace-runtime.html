@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>프로젝트 작업 영역</title>
+    <link rel="stylesheet" href="./workspace-runtime.css" />
+  </head>
+  <body>
+    <main class="runtime-page" aria-label="프로젝트 작업 영역 와이어프레임">
+      <header class="runtime-header">
+        <div class="runtime-copy">
+          <p class="eyebrow">Project Runtime Wireframe</p>
+          <h1 id="runtime-project-name">No Project Selected</h1>
+          <p id="runtime-tab-caption" class="runtime-sub">
+            프로젝트를 선택하면 오른쪽 탭 레일과 중앙 작업 영역 와이어프레임이 표시됩니다.
+          </p>
+        </div>
+        <div class="runtime-meta">
+          <span class="meta-chip">Global Rail</span>
+          <span class="meta-chip">Project Tabs</span>
+          <span class="meta-chip">Workspace Slots</span>
+        </div>
+      </header>
+
+      <section class="shell-map" aria-label="구성 안내">
+        <article class="map-card">
+          <span class="map-badge">A</span>
+          <strong>전역 프로젝트 레일</strong>
+          <p>가장 왼쪽 고정 레일에서 프로젝트를 전환합니다.</p>
+        </article>
+        <article class="map-card">
+          <span class="map-badge">B</span>
+          <strong>프로젝트 탭 레일</strong>
+          <p>선택한 프로젝트의 탭 목록이 세로로 나타납니다.</p>
+        </article>
+        <article class="map-card">
+          <span class="map-badge">C</span>
+          <strong>작업 영역 캔버스</strong>
+          <p>현재 탭 레이아웃에 맞는 모듈 슬롯 배치만 보여줍니다.</p>
+        </article>
+        <article class="map-card">
+          <span class="map-badge">D</span>
+          <strong>하단 설명 영역</strong>
+          <p>현재는 와이어프레임 메모만 두고, 실제 세부 기능은 비워둡니다.</p>
+        </article>
+      </section>
+
+      <section class="runtime-body">
+        <section class="canvas-card">
+          <div class="canvas-head">
+            <div>
+              <span class="section-kicker">Selected Tab</span>
+              <h2 id="runtime-active-tab">Wireframe</h2>
+            </div>
+            <div id="runtime-tab-preview" class="tab-preview" aria-label="탭 미리보기"></div>
+          </div>
+          <div id="runtime-slot-grid" class="slot-grid layout-single" aria-label="작업 영역 슬롯"></div>
+        </section>
+
+        <aside class="inspector-card">
+          <span class="section-kicker">Wireframe Notes</span>
+          <h2>배치 설명</h2>
+          <ul class="note-list">
+            <li>슬롯은 실제 툴이 아니라 위치와 역할을 설명하는 자리 표시자입니다.</li>
+            <li>탭을 바꾸면 레이아웃 구조가 달라질 수 있습니다.</li>
+            <li>다크/라이트 모두 같은 구조를 유지하고 색감만 바뀝니다.</li>
+          </ul>
+          <div class="note-block">
+            <span class="note-label">Current Focus</span>
+            <strong id="runtime-layout-name">Single Canvas</strong>
+          </div>
+          <div class="note-block">
+            <span class="note-label">Planned Detail Area</span>
+            <p>하단 설명, 속성, 상태 연결 영역이 여기에 붙을 수 있습니다.</p>
+          </div>
+        </aside>
+      </section>
+    </main>
+    <script type="module" src="./workspace-runtime.js"></script>
+  </body>
+</html>

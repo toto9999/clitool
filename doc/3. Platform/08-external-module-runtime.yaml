@@ -1,0 +1,534 @@
+version: 0.1.0
+
+runtime_scope:
+  purpose: >
+    Standardize how multi-language external modules and automation libraries are
+    packaged, launched, observed, and normalized so Python, Node, Go, shell,
+    renderer bundles, and service bridges can all participate in one project
+    without one-off runtime glue.
+  status: draft-authoritative
+  extends:
+    - doc/3. Platform/05-system-contracts.yaml
+    - doc/3. Platform/06-module-sdk.yaml
+    - doc/3. Platform/07-control-plane-and-observability.yaml
+
+principles:
+  - a module package may be implemented in any language, but must present one named contract surface
+  - input, intermediate execution state, and final result must be normalized by the host
+  - transport differences are adapter concerns, not project design concerns
+  - observability quality varies by library, but minimum lifecycle visibility is mandatory
+  - silent libraries are allowed only if the host can synthesize standard execution events
+  - rich libraries may expose more telemetry, but they must still map into the shared event taxonomy
+  - language-specific packaging rules must remain outside project yaml as runtime profiles and package manifests
+
+runtime_taxonomy:
+  language_kind_values:
+    - python
+    - node
+    - go
+    - shell
+    - native
+    - renderer-web
+    - remote-service
+    - mixed
+  runner_kind_values:
+    - in-process-js
+    - node-process
+    - python-process
+    - go-binary
+    - shell-command
+    - native-executable
+    - renderer-bundle
+    - http-service
+    - websocket-service
+    - mcp-bridge
+  transport_kind_values:
+    - in-memory-call
+    - stdio-jsonl
+    - ipc-message-port
+    - http-json
+    - websocket-json
+    - renderer-bridge
+  surface_mode_values:
+    - headless
+    - renderer-ui
+    - native-surface
+    - hybrid
+  execution_mode_values:
+    - request-response
+    - streaming-job
+    - long-lived-service
+    - interactive-session
+
+storage_contract:
+  durable_files:
+    - path: workspace/runtime-profiles.yaml
+      purpose: named launch and dependency profiles for python, node, go, shell, and remote services
+    - path: workspace/module-packages.yaml
+      purpose: installable external package manifests and built-in runtime package definitions
+  volatile_files:
+    - path: workspace-state/runtime/<project_key>/executions.yaml
+      purpose: live execution snapshots, pid references, and health status
+
+package_manifest_schema:
+  location: workspace/module-packages.yaml
+  required_fields:
+    - package_key
+    - display_name
+    - module_type
+    - language_kind
+    - runner_kind
+    - transport_kind
+    - surface_mode
+    - execution_mode
+    - observability_tier
+    - runtime_profile_key
+    - launch_contract
+    - action_contracts
+    - result_contracts
+    - lifecycle_contract
+    - compatibility
+  optional_fields:
+    - install_contract
+    - healthcheck_contract
+    - secret_refs
+    - file_layout
+    - ui_surface_contract
+    - telemetry_mapping
+    - artifact_contract
+  rules:
+    - package manifests describe concrete runtime execution, not abstract product intent
+    - built-in modules may also use package manifests so built-in and external packages share one model
+    - a package manifest cannot bypass the module sdk contract declared in 06-module-sdk.yaml
+    - runtime manifests must be paired with ai manifests declared in 09-ai-usable-module-manifest.yaml
+
+runtime_profile_schema:
+  location: workspace/runtime-profiles.yaml
+  required_fields:
+    - runtime_profile_key
+    - runner_kind
+    - launch_environment
+    - working_directory_policy
+    - timeout_defaults
+  optional_fields:
+    - executable_reference
+    - interpreter_reference
+    - package_manager_reference
+    - environment_bootstrap
+    - healthcheck_defaults
+  runner_specific_fields:
+    python-process:
+      - interpreter_reference
+      - venv_policy
+      - bootstrap_commands
+    node-process:
+      - interpreter_reference
+      - package_manager_reference
+      - bootstrap_commands
+    go-binary:
+      - executable_reference
+      - build_reference
+    shell-command:
+      - shell_profile_key
+      - startup_commands
+    http-service:
+      - base_url
+      - auth_policy_key
+
+launch_contract:
+  required_fields:
+    - entry_reference
+    - args_template
+    - env_policy
+    - cwd_policy
+    - startup_handshake
+  optional_fields:
+    - stdin_policy
+    - stdout_policy
+    - stderr_policy
+    - startup_timeout_ms
+    - shutdown_timeout_ms
+  rules:
+    - entry_reference must be readable and stable
+    - env_policy may reference effective cli and runtime profile values
+    - launch contracts must not embed raw secrets
+
+handshake_contract:
+  startup_handshake_modes:
+    - none
+    - process-spawned
+    - first-line-ready
+    - json-ready-message
+    - http-healthcheck
+    - websocket-ready-frame
+  rules:
+    - every out-of-process package must declare how the host knows it is ready
+    - handshake failure must produce a structured startup error and audit record
+
+healthcheck_contract:
+  healthcheck_modes:
+    - none
+    - process-alive
+    - ping-command
+    - http-endpoint
+    - websocket-ping
+    - custom-adapter-check
+  required_fields:
+    - healthcheck_mode
+    - interval_ms
+    - unhealthy_after_failures
+  rules:
+    - long-lived services and interactive sessions should declare healthchecks
+    - request-response jobs may omit healthchecks if startup cost is low
+
+input_output_normalization:
+  request_envelope:
+    required_fields:
+      - action_key
+      - trace_key
+      - action_name
+      - contract_key
+      - payload_schema_key
+      - payload
+  result_envelope:
+    required_fields:
+      - action_key
+      - result_status
+      - result_schema_key
+      - completed_at
+    optional_fields:
+      - result
+      - artifact_refs
+      - metrics
+      - execution_summary
+  result_status_values:
+    - success
+    - partial-success
+    - error
+    - timeout
+    - cancelled
+  rules:
+    - all external packages must accept normalized requests after adapter translation
+    - all external packages must return normalized result envelopes even if the source library returns raw text or exit codes
+    - raw stdout, stderr, exit code, or http response bodies may be preserved as artifacts but are not sufficient as the only final result
+
+observability_tiers:
+  purpose: >
+    Normalize execution visibility across packages that may have rich progress
+    hooks, only text logs, or no intermediate reporting at all.
+  tier_values:
+    - tier-0-result-only
+    - tier-1-host-lifecycle
+    - tier-2-text-stream
+    - tier-3-structured-progress
+    - tier-4-rich-trace
+  tier_definitions:
+    tier-0-result-only:
+      source_capability: library exposes only final result or exit status
+      minimum_host_events:
+        - execution.started
+        - execution.completed or execution.failed
+      optional_host_events:
+        - execution.heartbeat
+      notes:
+        - host must synthesize lifecycle events from launch and completion state
+    tier-1-host-lifecycle:
+      source_capability: library exposes start and finish boundaries but little or no progress detail
+      minimum_host_events:
+        - execution.started
+        - execution.phase.changed
+        - execution.completed or execution.failed
+      optional_host_events:
+        - execution.heartbeat
+    tier-2-text-stream:
+      source_capability: library exposes stdout/stderr or textual log callbacks
+      minimum_host_events:
+        - execution.started
+        - execution.log.line
+        - execution.completed or execution.failed
+      optional_host_events:
+        - execution.heartbeat
+        - execution.warning.raised
+    tier-3-structured-progress:
+      source_capability: library exposes structured progress, phases, counters, or checkpoints
+      minimum_host_events:
+        - execution.started
+        - execution.phase.changed
+        - execution.progress.reported
+        - execution.completed or execution.failed
+      optional_host_events:
+        - execution.artifact.emitted
+        - execution.warning.raised
+        - execution.metric.reported
+    tier-4-rich-trace:
+      source_capability: library exposes structured traces, nested stages, metrics, and artifacts
+      minimum_host_events:
+        - execution.started
+        - execution.phase.changed
+        - execution.progress.reported
+        - execution.checkpoint.created
+        - execution.completed or execution.failed
+      optional_host_events:
+        - execution.span.started
+        - execution.span.completed
+        - execution.metric.reported
+        - execution.artifact.emitted
+  rules:
+    - every package must declare exactly one observability_tier
+    - ui expectations and log analysis must respect the declared tier
+    - lack of rich progress is allowed only when the declared tier is honest and the host emits minimum lifecycle events
+
+normalized_event_taxonomy:
+  event_names:
+    - execution.started
+    - execution.phase.changed
+    - execution.progress.reported
+    - execution.heartbeat
+    - execution.log.line
+    - execution.warning.raised
+    - execution.checkpoint.created
+    - execution.metric.reported
+    - execution.artifact.emitted
+    - execution.completed
+    - execution.failed
+    - execution.cancelled
+  shared_fields:
+    - event_record_key
+    - trace_key
+    - action_key
+    - package_key
+    - module_key
+    - created_at
+    - observability_tier
+  event_specific_notes:
+    execution.log.line:
+      recommended_fields:
+        - log_level
+        - message_text
+        - stream_kind
+    execution.progress.reported:
+      recommended_fields:
+        - progress_unit
+        - progress_value
+        - progress_total
+        - progress_label
+    execution.artifact.emitted:
+      recommended_fields:
+        - artifact_key
+        - artifact_kind
+        - artifact_ref
+    execution.failed:
+      recommended_fields:
+        - error_code
+        - error_message
+        - exit_code
+
+adapter_normalization_rules:
+  silent_library_policy:
+    applies_to:
+      - tier-0-result-only
+      - tier-1-host-lifecycle
+    host_requirements:
+      - emit execution.started immediately after successful launch or call admission
+      - emit execution.heartbeat for long-running jobs when no source signal exists
+      - emit execution.completed or execution.failed with duration, exit_code, and summary when available
+  text_log_policy:
+    applies_to:
+      - tier-2-text-stream
+    host_requirements:
+      - map stdout and stderr into execution.log.line
+      - infer warning or error severity without mutating original text
+      - preserve raw text ordering per execution stream
+  structured_progress_policy:
+    applies_to:
+      - tier-3-structured-progress
+      - tier-4-rich-trace
+    host_requirements:
+      - map source phases, checkpoints, counters, and artifacts into normalized event names
+      - preserve source field names inside metadata when lossy translation would occur
+      - emit synthetic lifecycle events only for missing boundaries, not to duplicate source truth
+  rules:
+    - adapters may add synthetic events, but must label them as synthesized
+    - adapters must not fabricate fake percentages when the source library does not provide them
+    - adapters may provide status text without percent when only coarse progress exists
+
+execution_state_machine:
+  states:
+    - requested
+    - admitted
+    - launching
+    - running
+    - waiting
+    - completed
+    - failed
+    - cancelled
+    - timed-out
+  transitions:
+    - requested -> admitted
+    - admitted -> launching
+    - launching -> running
+    - running -> waiting
+    - waiting -> running
+    - running -> completed
+    - running -> failed
+    - running -> cancelled
+    - running -> timed-out
+  rules:
+    - every external execution must have a visible state transition trail
+    - waiting is used when the host is alive but no source output has arrived
+
+artifact_contract:
+  purpose: let packages return files, urls, or structured outputs without ad-hoc rules
+  required_fields:
+    - artifact_key
+    - artifact_kind
+    - artifact_ref
+  artifact_kind_values:
+    - file
+    - directory
+    - url
+    - text
+    - json
+    - yaml
+    - binary
+  rules:
+    - artifact keys must be readable
+    - durable artifact refs must point to project-owned or exported locations
+
+failure_normalization:
+  failure_sources:
+    - launch-failure
+    - handshake-failure
+    - healthcheck-failure
+    - protocol-violation
+    - source-error
+    - timeout
+    - cancellation
+  required_fields:
+    - error_code
+    - error_message
+    - error_scope
+    - failure_source
+  rules:
+    - exit code alone is not enough; it must be normalized into structured failure data
+    - transport decode failures must mention the source transport and offending package_key
+
+compatibility_contract:
+  required_fields:
+    - platform_support
+    - runtime_requirements
+    - schema_support
+  platform_support_fields:
+    - windows
+    - macos
+    - linux
+  rules:
+    - incompatible packages must be rejected before launch
+    - compatibility checks must run during validation, not after user execution starts
+
+example_manifests:
+  python_result_only:
+    package_key: package-python-data-cleaner
+    display_name: Python Data Cleaner
+    module_type: automation-lib
+    language_kind: python
+    runner_kind: python-process
+    transport_kind: stdio-jsonl
+    surface_mode: headless
+    execution_mode: request-response
+    observability_tier: tier-0-result-only
+    runtime_profile_key: runtime-python-default
+    launch_contract:
+      entry_reference: tools/data_cleaner/main.py
+      args_template:
+        - run
+      env_policy: inherit-runtime-profile
+      cwd_policy: project-working-directory
+      startup_handshake: process-spawned
+    action_contracts:
+      - data.clean
+    result_contracts:
+      - result-data-clean-v1
+    lifecycle_contract: lifecycle-external-job-v1
+    compatibility:
+      platform_support:
+        windows: supported
+        macos: unknown
+        linux: supported
+      runtime_requirements:
+        - python-3.11
+      schema_support:
+        - payload-data-clean-v1
+        - result-data-clean-v1
+  go_text_stream:
+    package_key: package-go-batch-runner
+    display_name: Go Batch Runner
+    module_type: automation-lib
+    language_kind: go
+    runner_kind: go-binary
+    transport_kind: stdio-jsonl
+    surface_mode: headless
+    execution_mode: streaming-job
+    observability_tier: tier-2-text-stream
+    runtime_profile_key: runtime-go-default
+    launch_contract:
+      entry_reference: bin/batch-runner.exe
+      args_template:
+        - execute
+      env_policy: inherit-runtime-profile
+      cwd_policy: project-working-directory
+      startup_handshake: first-line-ready
+    action_contracts:
+      - batch.execute
+    result_contracts:
+      - result-batch-execute-v1
+    lifecycle_contract: lifecycle-external-job-v1
+    compatibility:
+      platform_support:
+        windows: supported
+        macos: unsupported
+        linux: supported
+      runtime_requirements: []
+      schema_support:
+        - payload-batch-execute-v1
+        - result-batch-execute-v1
+  node_structured_progress:
+    package_key: package-node-doc-indexer
+    display_name: Node Doc Indexer
+    module_type: automation-lib
+    language_kind: node
+    runner_kind: node-process
+    transport_kind: ipc-message-port
+    surface_mode: hybrid
+    execution_mode: streaming-job
+    observability_tier: tier-3-structured-progress
+    runtime_profile_key: runtime-node-default
+    launch_contract:
+      entry_reference: packages/doc-indexer/dist/index.js
+      args_template:
+        - serve
+      env_policy: inherit-runtime-profile
+      cwd_policy: package-root
+      startup_handshake: json-ready-message
+    action_contracts:
+      - docs.index
+    result_contracts:
+      - result-docs-index-v1
+    lifecycle_contract: lifecycle-external-service-v1
+    compatibility:
+      platform_support:
+        windows: supported
+        macos: supported
+        linux: supported
+      runtime_requirements:
+        - node-22
+      schema_support:
+        - payload-docs-index-v1
+        - result-docs-index-v1
+
+implementation_order:
+  - finalize this yaml and freeze runner, transport, and observability tier vocabulary
+  - add runtime profile and module package registries to the loader layer
+  - implement external runner adapters for stdio-jsonl, ipc-message-port, and http-json
+  - implement observability normalization and synthetic lifecycle events
+  - expose normalized execution traces to gui, cli, and analysis views

@@ -1,0 +1,68 @@
+version: 0.1.0
+
+document:
+  key: verification-and-release-gates
+  status: active
+  purpose: >
+    Define the proof points that must pass before architecture claims are
+    considered real and before packaged releases are allowed.
+  extends:
+    - doc/3. Platform/12-browser-automation-and-playwright-mcp.yaml
+    - doc/3. Platform/22-build-packaging-and-update.yaml
+
+decision-summary:
+  - every high-risk subsystem gets a concrete gate, not just an intention
+  - PoC gates come before broad feature implementation
+  - release gates include docs, package, runtime, and security checks
+
+gate-stages:
+  - architecture-poc
+  - implementation-ready
+  - release-candidate
+  - stable-release
+
+architecture-poc-gates:
+  - gate_key: gate-electron-shell-boot
+    requirement: Electron main, preload, and renderer start together on Windows
+  - gate_key: gate-workspace-yaml-roundtrip
+    requirement: workspace and project YAML load-save-load is deterministic
+  - gate_key: gate-textual-cli-boot
+    requirement: TextualCLIHost launches and exchanges a minimal action with the control plane
+  - gate_key: gate-terminal-pty-windows
+    requirement: PTY session create, input, resize, and exit work on Windows
+  - gate_key: gate-browser-webcontentsview
+    requirement: visible WebContentsView loads and reports navigation events safely
+  - gate_key: gate-browser-same-surface-automation
+    requirement: currently visible browser surface can be controlled through the host-owned automation bridge
+  - gate_key: gate-auth-callback
+    requirement: system-browser auth flow returns through callback handling and stores no plaintext token in YAML
+  - gate_key: gate-secret-storage
+    requirement: secret_ref resolution works and logs remain redacted
+  - gate_key: gate-project-ingress-routing
+    requirement: one-project-one-ingress route works through the gateway without ad-hoc public ports
+
+implementation-ready-gates:
+  - docs validate passes
+  - typecheck passes
+  - production build passes
+  - no required architecture doc is stale relative to implementation scope
+  - all new stable features have cli projection and policy coverage
+
+release-candidate-gates:
+  - packaged app launches on target OS
+  - installer or packaged artifact smoke test passes
+  - native modules load in packaged environment
+  - secrets remain inaccessible from renderer-only paths
+  - startup, project open, terminal launch, browser launch, and log viewing smoke scenarios pass
+
+stable-release-gates:
+  - signed artifact available for supported production platforms
+  - release notes and rollback metadata prepared
+  - update path verified for supported channels
+  - no blocker security or data-loss issue open
+
+failure-policy:
+  rules:
+    - failing an architecture-poc gate blocks dependent implementation rollout
+    - failing a release gate blocks publish even if the app builds
+    - temporary waivers must be explicit, time-bounded, and recorded in audit or release notes

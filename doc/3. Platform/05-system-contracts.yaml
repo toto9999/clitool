@@ -1,0 +1,819 @@
+version: 0.1.0
+
+contract_scope:
+  purpose: >
+    Lock down persistence layout, readable identifier rules, module composition,
+    and runtime communication contracts before implementation expands.
+  status: draft-authoritative
+  reference_templates:
+    - doc/3. Platform/11-auth-provider-templates.yaml
+    - doc/3. Platform/13-channel-domain-and-port-routing.yaml
+
+design_principles:
+  - yaml is the source of truth for persisted configuration and contract definitions
+  - every persisted identifier must be visually readable and semantically meaningful
+  - uuid, ulid, nanoid, hash-like ids, and opaque random tokens are forbidden
+  - module instances never call each other directly
+  - all cross-module traffic goes through the runtime host bus
+  - durable configuration and volatile runtime state are stored separately
+
+identifier_policy:
+  character_style: lowercase-kebab-case
+  sequence_style: two-digit or four-digit zero-padded suffix
+  forbidden_examples:
+    - 550e8400-e29b-41d4-a716-446655440000
+    - 01hv6w7z0m6j3a8m0t5f3m2xq9
+    - a8f91c2d
+  allowed_patterns:
+    project_key: "proj-<domain>-<purpose>"
+    gateway_key: "gateway-<scope>-<purpose>"
+    ingress_key: "ingress-<project-purpose>"
+    channel_key: "chan-<purpose>"
+    cli_profile_key: "cli-<scope>-<purpose>"
+    runtime_profile_key: "runtime-<language>-<purpose>"
+    package_key: "package-<language>-<purpose>"
+    skill_key: "skill-<domain>-<purpose>"
+    mcp_server_key: "mcp-<provider>-<purpose>"
+    attachment_key: "attach-<provider>-<purpose>-<nn>"
+    tab_key: "tab-<purpose>-<nn>"
+    layout_key: "layout-<purpose>-<nn>"
+    slot_key: "slot-<area>-<nn>"
+    module_key: "mod-<module-type>-<purpose>-<nn>"
+    binding_key: "bind-<source-purpose>-to-<target-purpose>-<nn>"
+    session_key: "sess-<module-type>-<purpose>-<nn>"
+    action_key: "act-<scope>-<nnnn>"
+    trace_key: "trace-<scope>-<nnnn>"
+    audit_key: "audit-<scope>-<nnnn>"
+    event_record_key: "evt-<scope>-<nnnn>"
+    artifact_key: "artifact-<scope>-<nnnn>"
+    bucket_key: "bucket-<yyyy-mm>"
+    message_key: "msg-<scope>-<nnnn>"
+  examples:
+    - proj-bridge-lab
+    - tab-analysis-01
+    - mod-browser-docs-01
+    - mod-terminal-shell-01
+    - bind-browser-docs-to-shell-01
+    - attach-skill-docs-collector-01
+    - act-project-0042
+    - trace-proj-bridge-lab-0001
+
+storage_plan:
+  durable_root:
+    development: workspace/
+    packaged: "{userData}/workspace/"
+  volatile_root:
+    development: workspace-state/
+    packaged: "{userData}/workspace-state/"
+  durable_files:
+    - path: workspace/app.yaml
+      purpose: app-wide preferences and storage defaults
+    - path: workspace/cli-profiles.yaml
+      purpose: global cli defaults and reusable derived cli profiles
+    - path: workspace/runtime-profiles.yaml
+      purpose: named launch profiles for external package runtimes
+    - path: workspace/module-packages.yaml
+      purpose: concrete runtime package manifests for built-in and external modules
+    - path: workspace/module-ai-manifests.yaml
+      purpose: ai-facing semantic manifests for module understanding and recommendation
+    - path: workspace/binding-policies.yaml
+      purpose: compatibility and recommendation rules for safe module composition
+    - path: workspace/skills-registry.yaml
+      purpose: globally available skill definitions for project attachment
+    - path: workspace/mcp-registry.yaml
+      purpose: globally available mcp server definitions for project attachment
+    - path: workspace/auth-providers.yaml
+      purpose: workspace-managed auth provider definitions, callback policies, and scope classes
+    - path: workspace/channel-domains.yaml
+      purpose: workspace gateway domains, tls mode, and canonical host-pattern settings
+    - path: workspace/port-registry.yaml
+      purpose: stable allocation of project ingress ports and reserved ranges
+    - path: workspace/module-catalog.yaml
+      purpose: built-in and user-added module catalog definitions
+    - path: workspace/projects-index.yaml
+      purpose: project order, summaries, and default project selection
+    - path: workspace/projects/<project_key>/project.yaml
+      purpose: project metadata and tab order
+    - path: workspace/projects/<project_key>/attachments.yaml
+      purpose: project-scoped skill and mcp attachment declarations
+    - path: workspace/projects/<project_key>/channels.yaml
+      purpose: project ingress channel exposure, host labels, and route declarations
+    - path: workspace/projects/<project_key>/tabs/<tab_key>.yaml
+      purpose: tab layout, module instances, and bindings
+    - path: workspace/projects/<project_key>/presets/<preset_key>.yaml
+      purpose: reusable transforms, command templates, and policy presets
+    - path: workspace/logs/actions/<scope_key>/<bucket_key>.yaml
+      purpose: durable action request and completion buckets
+    - path: workspace/logs/events/<scope_key>/<bucket_key>.yaml
+      purpose: durable runtime and domain event buckets
+    - path: workspace/logs/audit/<scope_key>/<bucket_key>.yaml
+      purpose: durable policy and security audit buckets
+  volatile_files:
+    - path: workspace-state/runtime-index.yaml
+      purpose: currently open project, active tab, and message counters
+    - path: workspace-state/projects/<project_key>/sessions.yaml
+      purpose: restorable browser and terminal session state
+    - path: workspace-state/projects/<project_key>/auth-state.yaml
+      purpose: pending auth sessions, pkce verifier state, callback correlation, and expiry tracking
+    - path: workspace-state/projects/<project_key>/views.yaml
+      purpose: live bounds, focus, and temporary UI state
+    - path: workspace-state/projects/<project_key>/ide-state.yaml
+      purpose: open editors, active panels, downloads, and workspace tool state
+    - path: workspace-state/analysis/<project_key>/projection-cache.yaml
+      purpose: rebuildable action and event analysis summaries
+
+project_schema:
+  project_file:
+    required_fields:
+      - project_key
+      - project_name
+      - icon_key
+      - tab_order
+      - default_tab_key
+      - cli_profile_key
+      - cli_overrides
+      - project_policies
+    example:
+      project_key: proj-bridge-lab
+      project_name: Bridge Lab
+      icon_key: bridge
+      default_tab_key: tab-analysis-01
+      cli_profile_key: cli-project-bridge-lab
+      cli_overrides:
+        working_directory: C:/MIDAS/code/bridge-lab
+        env_overrides:
+          PROJECT_CODE: bridge-lab
+      tab_order:
+        - tab-analysis-01
+        - tab-report-01
+      project_policies:
+        browser_policy_key: policy-browser-standard
+        terminal_policy_key: policy-terminal-standard
+        control_plane_policy_key: policy-control-plane-standard
+
+auth_provider_registry_schema:
+  provider_registry_file:
+    location: workspace/auth-providers.yaml
+    required_fields:
+      - auth_provider_key
+      - display_name
+      - provider_class
+      - auth_protocol
+      - client_mode
+      - default_surface_policy
+      - callback_modes
+      - requested_scope_sets
+      - token_storage_policy_key
+      - audit_policy_key
+    optional_fields:
+      - provider_policy_notes
+      - allowed_projects
+      - secret_refs
+      - registration_metadata
+  provider_class_values:
+    - google-oauth
+    - generic-native-oauth
+    - enterprise-sso-browser-redirect
+    - device-code
+    - manual-secret-entry
+    - local-dev-mock-auth
+  callback_mode_values:
+    - loopback
+    - custom-protocol
+    - post-login-manual-confirmation
+    - user-code-entry
+    - polling-session
+    - none
+    - embedded-dev-only
+  rules:
+    - auth provider definitions are workspace-managed and reviewable, not hidden inside module settings
+    - embedded browser exceptions must be explicitly declared per auth provider
+    - redirect uri and callback mode choices must remain readable and auditable
+    - sensitive scope sets must be labeled by meaning, not by opaque string blobs
+    - concrete starter examples should follow 11-auth-provider-templates.yaml
+
+auth_session_schema:
+  auth_state_file:
+    location: workspace-state/projects/<project_key>/auth-state.yaml
+    required_fields:
+      - project_key
+      - sessions
+    session_fields:
+      - auth_session_key
+      - auth_provider_key
+      - flow_kind
+      - auth_surface
+      - callback_mode
+      - redirect_uri
+      - requested_scope_set_key
+      - state_key
+      - pkce_verifier_ref
+      - code_challenge_method
+      - started_at
+      - expires_at
+      - status
+    optional_session_fields:
+      - tab_key
+      - module_key
+      - actor_key
+      - callback_route
+      - provider_account_hint
+      - last_error_code
+      - last_error_summary
+  status_values:
+    - pending-launch
+    - browser-opened
+    - callback-received
+    - exchange-running
+    - authenticated
+    - failed
+    - cancelled
+    - expired
+  rules:
+    - pkce_verifier_ref points to host-managed secret storage and never stores the raw verifier in plaintext yaml
+    - callback query values are persisted only in redacted or normalized form
+    - completed or expired auth sessions may be pruned by retention policy after durable audit trails exist
+
+workspace_gateway_schema:
+  gateway_file:
+    location: workspace/channel-domains.yaml
+    required_fields:
+      - gateway_key
+      - proxy_engine
+      - mode
+      - http_port
+      - https_port
+      - internal_base_domain
+      - host_pattern
+    optional_fields:
+      - external_base_domain
+      - admin_bind
+      - tls_mode
+      - local_fallback_mode
+  rules:
+    - caddy is the default proxy_engine unless an approved replacement is declared
+    - the gateway is the only public http listener for workspace-managed project traffic
+    - internal and external domain strategy must be readable and reviewable
+
+port_registry_schema:
+  registry_file:
+    location: workspace/port-registry.yaml
+    required_fields:
+      - reserved_ranges
+      - project_ingress_ports
+    project_ingress_port_fields:
+      - project_key
+      - ingress_key
+      - ingress_port
+      - allocation_state
+  rules:
+    - each project owns one canonical ingress_port for user-facing http channels
+    - public-facing channel exposure must not allocate a second ad-hoc project port
+    - internal worker communication should prefer ipc or message ports over tcp ports
+    - any unavoidable private loopback port must be marked internal-only and must not become a stable external contract
+
+project_channel_schema:
+  channels_file:
+    location: workspace/projects/<project_key>/channels.yaml
+    required_fields:
+      - project_key
+      - ingress_key
+      - canonical_host_labels
+      - channel_host_mode
+      - channels
+    channel_fields:
+      - channel_key
+      - display_name
+      - visibility
+      - path_prefix
+      - target_kind
+      - exposure_policy_key
+    optional_channel_fields:
+      - upstream_route_key
+      - auth_policy_key
+      - websocket_enabled
+      - notes
+  rules:
+    - one project ingress serves many channels by path or reviewed host rules
+    - path prefixes must be deterministic and collision-free inside one project
+    - external visibility is deny-by-default unless explicitly declared
+    - auth callbacks, mcp bridges, and api surfaces must fit under the same project ingress strategy
+
+tab_schema:
+  tab_file:
+    required_fields:
+      - tab_key
+      - tab_name
+      - layout
+      - modules
+      - bindings
+    optional_fields:
+      - cli_profile_key
+      - cli_overrides
+    layout:
+      required_fields:
+        - layout_key
+        - layout_type
+        - slots
+      slot_fields:
+        - slot_key
+        - title
+        - bounds
+    module_instance_fields:
+      - module_key
+      - module_type
+      - catalog_module_key
+      - slot_key
+      - module_name
+      - cli_profile_key
+      - cli_overrides
+      - settings
+      - channel_refs
+    binding_fields:
+      - binding_key
+      - when
+      - from
+      - to
+      - transform_chain
+
+module_catalog_schema:
+  required_fields:
+    - catalog_module_key
+    - module_type
+    - display_name
+    - runtime_class
+    - package_key
+    - ai_manifest_key
+    - settings_schema_key
+    - allowed_commands
+    - emitted_events
+  built_in_modules:
+    - catalog_module_key: catalog-browser-standard
+      module_type: browser
+      display_name: Browser
+      runtime_class: browser-surface
+      package_key: package-builtin-browser-surface
+      ai_manifest_key: ai-browser-standard
+      settings_schema_key: schema-browser-standard
+    - catalog_module_key: catalog-terminal-standard
+      module_type: terminal
+      display_name: Terminal
+      runtime_class: terminal-surface
+      package_key: package-builtin-terminal-pty
+      ai_manifest_key: ai-terminal-standard
+      settings_schema_key: schema-terminal-standard
+
+module_add_flow:
+  steps:
+    - choose catalog_module_key from module catalog
+    - resolve package_key and runtime profile from the module catalog entry
+    - resolve ai_manifest_key and binding recommendations from ai registries
+    - derive module_key from readable pattern and next sequence in the tab scope
+    - create module instance entry inside the target tab yaml
+    - attach module to a slot_key or mark it as unplaced
+    - create default settings inline or by preset reference
+    - resolve cli profile for cli-aware modules from inheritance chain
+    - allocate session_key only if the module type requires a live runtime session
+    - register default bindings only from approved presets
+  rules:
+    - module keys are unique only within a project, not globally random
+    - module settings must stay human-readable in yaml
+    - ad-hoc hidden fields are forbidden
+    - every new module type must declare commands and events before UI wiring
+    - cli-aware modules must declare whether they use inherited cli context or a dedicated cli profile
+
+cli_configuration_model:
+  purpose: >
+    Define how the global CLI configuration is derived into project, tab, and module contexts
+    without duplicating opaque runtime state.
+  durable_files:
+    global_cli_file: workspace/app.yaml
+    reusable_cli_profiles_file: workspace/cli-profiles.yaml
+    project_cli_location: workspace/projects/<project_key>/project.yaml
+    tab_cli_location: workspace/projects/<project_key>/tabs/<tab_key>.yaml
+  inheritance_order:
+    - app default cli
+    - named cli profile
+    - project cli overrides
+    - tab cli overrides
+    - module cli overrides
+    - session runtime overrides
+  merge_policy:
+    scalar_fields: nearest override wins
+    map_fields: shallow merge by key unless explicitly replaced
+    list_fields: replace entirely, no implicit concat
+  rules:
+    - every project must resolve to exactly one effective cli configuration
+    - cli resolution must be deterministic from yaml alone before runtime session starts
+    - runtime-only state must not be written back into durable cli config
+    - secrets are referenced by readable secret_ref keys and not stored inline in project yaml
+    - module-specific cli overrides are optional and only valid for cli-aware modules
+
+cli_profile_schema:
+  global_app_cli:
+    location: workspace/app.yaml
+    required_fields:
+      - default_cli_profile_key
+      - cli_defaults
+    example:
+      default_cli_profile_key: cli-global-default
+      cli_defaults:
+        shell_profile_key: shell-pwsh-default
+        runner_key: runner-local-shell
+        timeout_ms: 30000
+        env_defaults:
+          MIDAS_ENV: dev
+  reusable_profiles_file:
+    location: workspace/cli-profiles.yaml
+    required_fields:
+      - profiles
+    profile_fields:
+      - cli_profile_key
+      - base_cli_profile_key
+      - cli_settings
+      - secret_refs
+      - allowed_module_types
+      - description
+    example_profile:
+      cli_profile_key: cli-global-default
+      base_cli_profile_key: null
+      cli_settings:
+        shell_profile_key: shell-pwsh-default
+        runner_key: runner-local-shell
+        startup_directory: C:/MIDAS/code
+        env_defaults:
+          MIDAS_ENV: dev
+      secret_refs: []
+      allowed_module_types:
+        - terminal
+        - ai-assistant
+      description: Global default CLI context
+
+effective_cli_schema:
+  required_fields:
+    - resolved_cli_profile_key
+    - shell_profile_key
+    - runner_key
+    - startup_directory
+    - env_effective
+    - secret_refs
+  optional_fields:
+    - startup_commands
+    - policy_keys
+    - timeout_ms
+  rule:
+    - effective cli objects are derived, not hand-authored per session
+
+cli_aware_module_policy:
+  default_cli_aware_module_types:
+    - terminal
+    - ai-assistant
+  rules:
+    - browser and pdf-viewer are not cli-aware by default
+    - cli-aware modules may reference cli_profile_key or inherit project/tab effective cli
+    - if cli_profile_key is omitted, inherited effective cli is used
+    - if cli_overrides are present, they apply only to the owning module instance
+
+secret_reference_policy:
+  allowed_storage:
+    durable_yaml:
+      - secret_ref
+      - secret_scope
+    forbidden_storage:
+      - raw_api_key
+      - raw_password
+      - raw_token
+  rules:
+    - secret values must live outside project design yaml
+    - secret_ref keys must be readable and scoped
+    - project export/import must preserve secret refs but never embed secret values
+
+cli_resolution_examples:
+  app_yaml:
+    default_cli_profile_key: cli-global-default
+    cli_defaults:
+      shell_profile_key: shell-pwsh-default
+      runner_key: runner-local-shell
+      startup_directory: C:/MIDAS/code
+  cli_profiles_yaml:
+    profiles:
+      - cli_profile_key: cli-global-default
+        base_cli_profile_key: null
+        cli_settings:
+          shell_profile_key: shell-pwsh-default
+          runner_key: runner-local-shell
+          startup_directory: C:/MIDAS/code
+          env_defaults:
+            MIDAS_ENV: dev
+        secret_refs: []
+        allowed_module_types:
+          - terminal
+          - ai-assistant
+        description: Global CLI base
+      - cli_profile_key: cli-project-bridge-lab
+        base_cli_profile_key: cli-global-default
+        cli_settings:
+          startup_directory: C:/MIDAS/code/bridge-lab
+          env_defaults:
+            PROJECT_CODE: bridge-lab
+        secret_refs:
+          - secret_ref: secret-openai-bridge-lab
+            secret_scope: project
+        allowed_module_types:
+          - terminal
+          - ai-assistant
+        description: Project derived CLI
+
+runtime_separation:
+  durable_config:
+    includes:
+      - project metadata
+      - tab order
+      - layout definitions
+      - module settings
+      - declared bindings
+      - declared skill and mcp attachments
+      - action exposure and control policies
+  volatile_state:
+    includes:
+      - active browser url
+      - terminal process id
+      - focus state
+      - live geometry
+      - reconnect counters
+  rule:
+    - volatile runtime state must not pollute project design yaml
+
+communication_model:
+  owner: runtime-host
+  direct_calls_forbidden: true
+  route_scopes:
+    - host
+    - project
+    - tab
+    - module
+  transport_rule:
+    - runtime transport uses structured objects over Electron IPC and message ports
+    - command/event contracts and payload schema keys are defined in yaml
+
+message_contract:
+  envelope_fields:
+    - message_key
+    - project_key
+    - tab_key
+    - source_module_key
+    - target_scope
+    - target_module_key
+    - contract_kind
+    - contract_key
+    - payload_schema_key
+    - payload
+    - created_at
+  rules:
+    - contract_kind is either command or event
+    - contract_key names must be readable dot-paths
+    - source_module_key is required for module-origin traffic
+    - target_module_key is required when target_scope is module
+    - payload_schema_key must resolve to a declared schema name
+  command_naming:
+    pattern: "<domain>.<action>"
+    examples:
+      - browser.navigate
+      - browser.reload
+      - terminal.write
+      - terminal.resize
+      - host.save-project
+  event_naming:
+    pattern: "<domain>.<subject>.<state>"
+    examples:
+      - browser.page.loaded
+      - browser.selection.captured
+      - terminal.output.chunk
+      - terminal.session.exited
+      - host.project.saved
+
+module_bus_rules:
+  allowed_paths:
+    - renderer-ui -> runtime-host
+    - runtime-host -> terminal-service
+    - runtime-host -> browser-service
+    - browser-service -> runtime-host -> terminal-service
+    - terminal-service -> runtime-host -> browser-service
+  blocked_paths:
+    - renderer-ui -> node-pty direct access
+    - remote-web-page -> electron ipc direct access
+    - browser module -> terminal module direct invocation
+    - module instance -> filesystem direct write without host approval
+
+binding_contract:
+  schema:
+    required_fields:
+      - binding_key
+      - when
+      - from
+      - to
+      - transform_chain
+    from_fields:
+      - module_key
+      - event_key
+    to_fields:
+      - module_key
+      - command_key
+    optional_fields:
+      - guard_key
+      - debounce_ms
+      - enabled
+  example:
+    binding_key: bind-browser-docs-to-shell-01
+    when: on-event
+    from:
+      module_key: mod-browser-docs-01
+      event_key: browser.selection.captured
+    to:
+      module_key: mod-terminal-shell-01
+      command_key: terminal.write
+    transform_chain:
+      - transform_key: text.append-newline
+    enabled: true
+
+payload_schema_registry:
+  initial_schema_keys:
+    - payload-browser-navigation-v1
+    - payload-browser-selection-v1
+    - payload-terminal-write-v1
+    - payload-terminal-output-v1
+    - payload-host-save-project-v1
+  rule:
+    - payload schema keys are readable names with explicit version suffix
+
+session_strategy:
+  browser:
+    session_key_rule: "sess-browser-<purpose>-<nn>"
+    persistence:
+      durable:
+        - home_url
+        - allowed_domains
+      volatile:
+        - current_url
+        - back_stack_summary
+  terminal:
+    session_key_rule: "sess-terminal-<purpose>-<nn>"
+    persistence:
+      durable:
+        - shell_profile_key
+        - startup_path
+      volatile:
+        - running_state
+        - terminal_size
+        - last_exit_code
+
+example_files:
+  projects_index_yaml:
+    project_order:
+      - proj-bridge-lab
+    project_summaries:
+      - project_key: proj-bridge-lab
+        project_name: Bridge Lab
+        icon_key: bridge
+        default_tab_key: tab-analysis-01
+  project_yaml:
+    project_key: proj-bridge-lab
+    project_name: Bridge Lab
+    icon_key: bridge
+    default_tab_key: tab-analysis-01
+    cli_profile_key: cli-project-bridge-lab
+    cli_overrides:
+      env_overrides:
+        PROJECT_MODE: analysis
+    project_policies:
+      browser_policy_key: policy-browser-standard
+      terminal_policy_key: policy-terminal-standard
+      control_plane_policy_key: policy-control-plane-standard
+    tab_order:
+      - tab-analysis-01
+  attachments_yaml:
+    project_key: proj-bridge-lab
+    enabled_skill_attachments:
+      - attachment_key: attach-skill-docs-collector-01
+        skill_key: skill-docs-collector
+        attachment_scope: project
+        cli_profile_key: cli-project-bridge-lab
+        enabled_actions:
+          - skill.run
+        policy_key: policy-skill-readonly
+        surface_modes:
+          - gui
+          - project-cli
+    enabled_mcp_attachments:
+      - attachment_key: attach-mcp-docs-search-01
+        mcp_server_key: mcp-docs-search
+        attachment_scope: project
+        enabled_tools:
+          - docs.search
+        enabled_resources:
+          - docs.page
+        policy_key: policy-mcp-readonly
+        surface_modes:
+          - gui
+          - global-cli
+    action_exposure_policy:
+      require_global_cli_projection: true
+      require_gui_projection: true
+      require_logging: true
+    controller_defaults:
+      default_gui_actions:
+        - project.open
+        - project.save
+      default_cli_actions:
+        - project.open
+        - project.save
+        - mcp.tool.call
+      default_skill_targets:
+        - project
+      default_mcp_targets:
+        - project
+  tab_yaml:
+    tab_key: tab-analysis-01
+    tab_name: Analysis
+    cli_profile_key: cli-project-bridge-lab
+    cli_overrides:
+      startup_directory: C:/MIDAS/code/bridge-lab/analysis
+    layout:
+      layout_key: layout-analysis-01
+      layout_type: two-column
+      slots:
+        - slot_key: slot-left-01
+          title: Browser
+          bounds:
+            x: 0
+            y: 0
+            w: 6
+            h: 12
+        - slot_key: slot-right-01
+          title: Terminal
+          bounds:
+            x: 6
+            y: 0
+            w: 6
+            h: 12
+    modules:
+      - module_key: mod-browser-docs-01
+        module_type: browser
+        catalog_module_key: catalog-browser-standard
+        slot_key: slot-left-01
+        module_name: Docs Browser
+        cli_profile_key: null
+        cli_overrides: null
+        settings:
+          home_url: https://example.com
+          session_key: sess-browser-docs-01
+        channel_refs:
+          inbound:
+            - browser.navigate
+          outbound:
+            - browser.page.loaded
+            - browser.selection.captured
+      - module_key: mod-terminal-shell-01
+        module_type: terminal
+        catalog_module_key: catalog-terminal-standard
+        slot_key: slot-right-01
+        module_name: Analysis Shell
+        cli_profile_key: cli-project-bridge-lab
+        cli_overrides:
+          startup_commands:
+            - pnpm install
+        settings:
+          shell_profile_key: shell-pwsh-default
+          startup_path: C:/work
+          session_key: sess-terminal-shell-01
+        channel_refs:
+          inbound:
+            - terminal.write
+            - terminal.resize
+          outbound:
+            - terminal.output.chunk
+            - terminal.session.exited
+    bindings:
+      - binding_key: bind-browser-docs-to-shell-01
+        when: on-event
+        from:
+          module_key: mod-browser-docs-01
+          event_key: browser.selection.captured
+        to:
+          module_key: mod-terminal-shell-01
+          command_key: terminal.write
+        transform_chain:
+          - transform_key: text.append-newline
+        enabled: true
+
+implementation_order:
+  - finalize this yaml and freeze identifier policy
+  - implement durable yaml loader and writer
+  - implement runtime profile and module package registries
+  - implement ai manifest and binding policy registries
+  - implement skill and mcp registry plus project attachment loading
+  - implement control plane action catalog and log bucket resolution
+  - implement module catalog registry
+  - implement runtime bus envelope and logging
+  - implement terminal and browser adapters against the same contract
+  - implement project editor UI on top of these fixed contracts

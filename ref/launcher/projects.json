@@ -1,0 +1,12 @@
+{
+  "activeSlug": "new-project",
+  "projects": [
+    {
+      "slug": "new-project",
+      "name": "New Project",
+      "rootPath": "C:\\MIDAS\\code\\clibase\\.cursor",
+      "createdAt": "2026-03-20T06:17:28.695Z",
+      "updatedAt": "2026-03-20T06:17:28.695Z"
+    }
+  ]
+}

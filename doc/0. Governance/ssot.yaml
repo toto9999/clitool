@@ -1,0 +1,244 @@
+version: 0.1.0
+
+project:
+  name: clibase
+  baseline_reference: ref/basic_reference
+  active_runtime: vite-react-mantine
+  target_runtime_host: electron-desktop-shell
+  product_positioning: cli-first automation workbench
+  primary_operator_profile: semi-technical power user with light code literacy
+
+documentation:
+  architecture_master_document: doc/3. Platform/17-central-architecture.md
+  required_documents:
+    - doc/0. Governance/ssot.yaml
+    - doc/0. Governance/ddd.md
+    - doc/0. Governance/workflow-rules.md
+    - doc/1. Strategy/14-product-direction.md
+    - doc/1. Strategy/16-project-operating-model.md
+    - doc/2. Product/15-core-user-scenarios.md
+    - doc/2. Product/02-product-ia.md
+    - doc/1. Strategy/03-rebuild-roadmap.md
+    - doc/3. Platform/04-runtime-platform-plan.md
+    - doc/3. Platform/17-central-architecture.md
+    - doc/3. Platform/05-system-contracts.yaml
+    - doc/3. Platform/06-module-sdk.yaml
+    - doc/3. Platform/07-control-plane-and-observability.yaml
+    - doc/3. Platform/08-external-module-runtime.yaml
+    - doc/3. Platform/09-ai-usable-module-manifest.yaml
+    - doc/3. Platform/10-browser-terminal-and-ide-foundation.yaml
+    - doc/3. Platform/11-auth-provider-templates.yaml
+    - doc/3. Platform/12-browser-automation-and-playwright-mcp.yaml
+    - doc/3. Platform/13-channel-domain-and-port-routing.yaml
+    - doc/3. Platform/18-global-cli-textual-foundation.yaml
+    - doc/3. Platform/19-performance-and-optimization-policy.yaml
+    - doc/3. Platform/20-secret-and-credential-management.yaml
+    - doc/3. Platform/21-permission-and-policy-matrix.yaml
+    - doc/3. Platform/22-build-packaging-and-update.yaml
+    - doc/3. Platform/23-verification-and-release-gates.yaml
+    - doc/3. Platform/24-trust-and-package-source-policy.yaml
+    - doc/9. Worklog/99-worklog.md
+  doc_first_rule: true
+
+workflow:
+  command_namespace: batcli
+  required_sequence:
+    - batcli workflow start "<note>"
+    - batcli workflow to-doc
+    - update required documents
+    - batcli workflow to-code
+    - implement code
+    - batcli workflow stop
+  phases:
+    - doc
+    - code
+  rules:
+    - code changes are not allowed before required documents are updated
+    - if implementation changes scope, return to doc phase before continuing
+    - every completed session must append a worklog entry
+
+product:
+  product_definition:
+    north_star: >
+      A CLI-first automation workbench where global CLI, project CLI, GUI, and
+      AI all control the same project system through one shared contract layer.
+    primary_value:
+      - let users configure custom cli workflows per project on top of a global cli base
+      - let ai control every stable app capability through the same cli and action system
+      - make advanced automation approachable to non-developers who have light code literacy
+  screens:
+    - ProjectManagement
+    - ProjectEditor
+    - ProjectWorkspace
+  module_types:
+    - Terminal
+    - Browser
+    - PdfViewer
+    - AiAssistant
+  shell_structure:
+    global_sidebar:
+      purpose: project management entry and project switching
+    project_tab_sidebar:
+      purpose: per-project tab switching
+    workspace_canvas:
+      purpose: render tab-specific layout and module composition
+  native_capabilities:
+    - terminal pty session management
+    - embedded browser surfaces
+    - controlled module-to-module messaging
+    - local persistence for project layouts
+    - global cli to project cli derivation
+    - ai-controllable action surfaces
+    - textual-based global cli experience
+
+runtime_platform:
+  host: electron
+  renderer: react-vite
+  browser_surface: WebContentsView
+  terminal_renderer: xterm.js
+  terminal_backend: node-pty
+  ipc_model:
+    - preload context bridge for renderer APIs
+    - typed ipc between renderer and main
+    - dedicated runtime service channel for terminal and browser modules
+  security_rules:
+    - remote web content must not have nodeIntegration
+    - contextIsolation must stay enabled
+    - sandbox must remain enabled for remote content
+    - raw electron ipc APIs must not be exposed to renderer ui
+    - webview tag is not the default browser embedding strategy
+
+design_constraints:
+  architecture_centralization_policy:
+    - the architecture master document is the single centralized map of the whole system
+    - architecture-affecting changes must update the architecture master document and the detailed contract documents together
+    - detailed platform documents may go deeper, but they must not contradict the architecture master document
+    - the architecture master document must include the current code tree, key file responsibilities, current versus target structure, and core flowcharts
+    - the architecture master document must remain sufficient for a new ai session to bootstrap codebase understanding quickly
+  persistence_format: yaml-first
+  identifier_policy:
+    allowed_style: readable-kebab-case
+    forbidden:
+      - uuid
+      - ulid
+      - nanoid
+      - opaque-hash
+      - unreadable-random-token
+  communication_policy:
+    - module to module calls must go through a central bus
+    - runtime transport may use structured objects, but the contract source of truth is yaml
+  extension_policy:
+    - every new module type must provide an sdk contract before implementation
+    - adapter lifecycle and capability surface must be declared in yaml first
+  cli_policy:
+    - every project must resolve from a global cli base
+    - cli inheritance and overrides must be yaml-declared and deterministic
+    - secrets are referenced, not embedded
+    - the authoritative interactive global cli host uses Textual
+    - reusable upstream cli libraries may be staged under ref/ as analysis references, but product behavior must be reimplemented in owned code rather than linked directly
+    - multiline paste, link paste, and image-oriented attachment ingestion are first-class global cli usability requirements
+  control_plane_policy:
+    - gui, global cli, project cli, skills, and mcp integrations must use the same named action contracts
+    - skill and mcp attachments must be yaml-declared per registry and per project scope
+    - all stable actions, events, and policy decisions must be loggable and replay-ready with readable keys
+    - browser automation from terminal, cli, or mcp must target the same control plane rather than a hidden side channel
+    - every product capability is incomplete until it is controllable from the shared cli and action layer
+  performance_policy:
+    - renderer state should prefer flat normalized structures and structural sharing over deep nested copies
+    - shallow reference stability for unchanged slices is the default optimization boundary
+    - caches require explicit ownership, invalidation, and size bounds
+    - browser, terminal, and log streams must be projected and backpressured before entering renderer state
+    - measurement and profiling come before blanket memoization
+  secret_policy:
+    - raw secrets never live in workspace yaml, project yaml, or ordinary logs
+    - only the host secret service resolves secret_ref values
+    - production secret storage requires a non-degraded protected backend
+  permission_policy:
+    - gui, cli, ai, skill, and mcp all pass through one policy engine
+    - destructive, install, signing, and public-exposure actions must default to confirm or deny
+  build_release_policy:
+    - desktop packaging and update strategy must be documented before release automation is implemented
+    - native module packaging checks are mandatory for release candidates
+  package_trust_policy:
+    - external packages, binaries, skills, mcp sources, and ref assets require recorded provenance and trust level
+    - project runtime installs should be pinned and isolated by default
+  routing_policy:
+    - workspace gateway and project ingress rules must be yaml-declared before implementation
+    - one project owns one canonical ingress port for user-facing http channels
+    - project http features should share one ingress and path-based channels rather than opening ad-hoc public ports
+    - caddy is the default workspace gateway for host and path routing unless a reviewed replacement is declared
+  external_runtime_policy:
+    - multi-language packages must declare runner, transport, and runtime profile in yaml before implementation
+    - each package must declare an honest observability tier
+    - when a source library is silent, the host must synthesize minimum lifecycle events instead of inventing fake progress
+  ai_planning_policy:
+    - every module type and external package must provide an ai-usable manifest with semantic description, examples, and usage hints
+    - binding compatibility and anti-patterns must be yaml-declared before ai auto-wiring is allowed
+    - ai planning must consult cost, latency, determinism, lifecycle, and retry metadata rather than inferring from names
+  browser_security_policy:
+    - remote web content must stay isolated from node and electron powers
+    - embedded browser compatibility is broad best-effort, not universal guarantee
+    - popup, download, permission, and certificate handling must be host-mediated and logged
+    - oauth and sensitive identity flows must prefer the system browser and host-managed callback handling
+    - auth providers, callback modes, scope classes, and log redaction policy must be yaml-declared before implementation
+  ide_policy:
+    - ide-like workspace requires browser, terminal, editor, task, and log panels as first-class concepts
+    - project-scoped runtime environments are preferred over global installs
+
+domain:
+  entities:
+    - Project
+    - AutomationWorkbench
+    - GlobalCLIBase
+    - ProjectCLIContext
+    - ProjectTab
+    - ModuleCatalogItem
+    - ModuleInstance
+    - LayoutTemplate
+    - SkillAttachment
+    - MCPAttachment
+    - ControlAction
+    - ExternalModulePackage
+    - RuntimeProfile
+    - ExecutionTrace
+    - AIManifest
+    - BindingPolicy
+    - BrowserSessionProfile
+    - AuthProvider
+    - WorkspaceGateway
+    - ProjectIngress
+    - ProjectChannel
+    - EditorWorkspaceState
+    - RuntimeToolPanel
+  required_behaviors:
+    - the whole architecture must remain explainable from one centralized master document
+    - a global cli base can derive many project cli contexts
+    - a project can own many tabs
+    - each tab has an independent layout
+    - modules come from a shared catalog
+    - the same module can be instantiated multiple times in one tab
+    - a project can attach many skills and mcp integrations without direct hidden coupling
+    - every stable app action must be controllable from gui and global cli through one contract
+    - ai must be able to control newly added stable capabilities through the same cli and action system
+    - action, event, and audit records must remain analyzable and replayable from yaml logs
+    - external libraries with different runtimes must still execute through one normalized request/result model
+    - observability quality differences between libraries must be explicit and normalized
+    - ai recommendations must come from declared semantic manifests and binding policies
+    - browser, terminal, editor, and package-manager actions must remain policy-controlled and observable
+    - project channel exposure and port allocation must remain deterministic and conflict-free
+
+implementation_status:
+  ui_shell_reset: done
+  governance_docs_restored: done
+  cli_enforcement_reconnection: done
+  control_plane_contract: done
+  external_runtime_contract: done
+  ai_manifest_contract: done
+  ide_foundation_contract: done
+  global_cli_textual_foundation_contract: done
+  performance_optimization_policy_contract: done
+  secret_credential_policy_contract: done
+  permission_policy_matrix_contract: done
+  build_packaging_update_contract: done
+  verification_release_gates_contract: done
+  trust_package_source_policy_contract: done

@@ -1,0 +1,29 @@
+{
+  "name": "launcher",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "dev:watch:ts": "tsc -w -p tsconfig.json",
+    "dev:watch:assets": "node scripts/watch-assets.mjs",
+    "dev:electron": "electron .",
+    "dev": "npm run build && concurrently \"npm:dev:watch:ts\" \"npm:dev:watch:assets\" \"npm:dev:electron\"",
+    "start": "electron .",
+    "settings:init": "npm run build && node dist/launcherCli.js init-settings",
+    "settings:dark": "npm run build && node dist/launcherCli.js set-theme dark",
+    "settings:light": "npm run build && node dist/launcherCli.js set-theme light"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "electron": "^41.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3"
+  }
+}

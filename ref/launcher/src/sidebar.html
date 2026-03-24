@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sidebar</title>
+    <link rel="stylesheet" href="./sidebar.css" />
+  </head>
+  <body>
+    <div class="sidebar-root">
+      <div class="col-a" id="col-a">
+        <nav class="rail-block rail-projects" aria-label="프로젝트">
+          <button
+            type="button"
+            id="open-workspace-manager"
+            class="rail-btn rail-btn--primary"
+            aria-label="프로젝트 관리"
+            title="프로젝트 관리 (생성, 수정, 삭제, 툴·레이아웃)"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <path
+                d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <div class="divider" role="separator" aria-hidden="true"></div>
+          <div id="project-list" class="project-list" role="list" aria-label="프로젝트 목록"></div>
+        </nav>
+
+        <div class="rail-flex-spacer" aria-hidden="true"></div>
+
+        <nav class="rail-block rail-shell" aria-label="런처">
+          <button
+            type="button"
+            id="tab-symphony"
+            class="rail-btn"
+            aria-label="심포니"
+            title="Symphony"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"
+              />
+            </svg>
+          </button>
+          <button type="button" id="open-settings" class="rail-btn" aria-label="설정" title="설정">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+              />
+            </svg>
+          </button>
+        </nav>
+      </div>
+
+      <div class="col-b" id="col-b" hidden>
+        <div id="tool-rail" class="tool-rail" role="list" aria-label="프로젝트 탭"></div>
+      </div>
+    </div>
+    <script type="module" src="./sidebar.js"></script>
+  </body>
+</html>

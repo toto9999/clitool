@@ -1,0 +1,431 @@
+version: 0.1.0
+
+sdk_scope:
+  purpose: >
+    Define the universal contract every module type must satisfy so new modules
+    can be added without ad-hoc storage, direct-coupling, or one-off runtime rules.
+  status: draft-authoritative
+
+principles:
+  - every module type must be describable by yaml before code is written
+  - every module instance is configured declaratively and executed by an adapter
+  - adapters may differ internally, but must expose the same lifecycle surface
+  - all module traffic must use the shared message envelope from 05-system-contracts.yaml
+  - all module responses must support ack, success, and error reporting
+  - schema versions are explicit and readable
+
+module_type_contract:
+  required_definition_fields:
+    - module_type
+    - category
+    - runtime_class
+    - adapter_key
+    - ai_manifest_key
+    - capability_keys
+    - settings_schema_key
+    - state_schema_key
+    - command_contracts
+    - event_contracts
+    - lifecycle_contract
+  required_runtime_characteristics:
+    - whether the module needs a live session
+    - whether the module renders native surface or renderer ui
+    - whether the module runs in-process or out-of-process
+    - whether the module can emit streaming events
+    - whether the module can receive buffered commands
+    - whether the module is cli-aware
+    - which observability tier the module package declares
+
+capability_registry:
+  purpose: modules declare capabilities instead of inventing hidden behavior
+  capability_keys:
+    - capability-render-ui
+    - capability-native-view
+    - capability-session-create
+    - capability-session-resume
+    - capability-session-destroy
+    - capability-stream-output
+    - capability-command-execute
+    - capability-navigation
+    - capability-selection-read
+    - capability-file-read
+    - capability-file-write
+    - capability-network-access
+    - capability-clipboard-read
+    - capability-clipboard-write
+    - capability-cli-context-read
+    - capability-cli-command-template
+    - capability-progress-report
+    - capability-heartbeat-emit
+    - capability-log-stream
+    - capability-artifact-output
+    - capability-download-manage
+    - capability-permission-observe
+    - capability-network-observe
+  rules:
+    - every module type must declare only approved capabilities
+    - capabilities are allowlists, not descriptions
+    - hidden side effects outside declared capabilities are forbidden
+
+adapter_contract:
+  adapter_definition_fields:
+    - adapter_key
+    - adapter_name
+    - owned_module_types
+    - input_contracts
+    - output_contracts
+    - lifecycle_hooks
+    - failure_modes
+  required_lifecycle_hooks:
+    - validate-config
+    - create-instance
+    - attach-surface
+    - start-instance
+    - handle-command
+    - emit-event
+    - snapshot-state
+    - suspend-instance
+    - resume-instance
+    - destroy-instance
+  lifecycle_rules:
+    - adapters must be idempotent for resume and destroy where feasible
+    - attach-surface and start-instance must be separate steps
+    - destroy-instance must release all native resources and sessions
+    - snapshot-state must output only volatile runtime state, never durable design config
+
+instance_lifecycle:
+  phases:
+    - declared
+    - validated
+    - created
+    - attached
+    - running
+    - suspended
+    - stopped
+    - error
+    - destroyed
+  transitions:
+    - declared -> validated
+    - validated -> created
+    - created -> attached
+    - attached -> running
+    - running -> suspended
+    - suspended -> running
+    - running -> stopped
+    - running -> error
+    - stopped -> destroyed
+    - error -> destroyed
+  rules:
+    - every transition must be observable by event
+    - invalid transitions must return structured error responses
+
+command_response_contract:
+  command_ack:
+    required_fields:
+      - message_key
+      - status
+      - accepted_at
+      - responder_key
+    status_values:
+      - accepted
+      - rejected
+  command_result:
+    required_fields:
+      - message_key
+      - result_status
+      - completed_at
+      - responder_key
+    result_status_values:
+      - success
+      - error
+      - timeout
+      - cancelled
+  error_object:
+    required_fields:
+      - error_code
+      - error_message
+      - error_scope
+    error_scope_values:
+      - validation
+      - adapter
+      - session
+      - permission
+      - transport
+      - timeout
+  rules:
+    - every command must produce an ack
+    - every accepted command must eventually produce success, error, timeout, or cancelled
+    - streaming modules may emit progress events before final result
+
+retry_policy:
+  command_retry_modes:
+    - no-retry
+    - retry-safe
+    - retry-with-dedup-key
+  rules:
+    - retry behavior must be declared per command contract
+    - destructive commands default to no-retry
+    - retry-with-dedup-key requires readable dedup keys, not random tokens
+
+cli_aware_module_contract:
+  rules:
+    - cli-aware modules must declare whether they inherit cli context or require explicit cli_profile_key
+    - cli-aware modules must not read raw secrets from durable yaml
+    - cli-aware modules receive resolved effective cli from runtime-host, not by self-merging files
+  required_definition_fields:
+    - cli_mode
+    - cli_resolution_policy
+  cli_mode_values:
+    - inherit
+    - explicit-profile
+    - not-applicable
+
+schema_version_policy:
+  key_pattern: "<schema-name>-v<major>"
+  examples:
+    - schema-browser-standard-v1
+    - payload-terminal-write-v1
+    - state-browser-session-v2
+  rules:
+    - breaking changes require a major version increment
+    - old schema versions remain readable until migration is complete
+    - adapters must declare supported schema versions explicitly
+    - migration logic must be one-way and documented
+
+migration_contract:
+  required_fields:
+    - from_schema_key
+    - to_schema_key
+    - migration_key
+    - migration_scope
+    - idempotent
+  migration_scope_values:
+    - durable-config
+    - volatile-state
+    - payload
+  rules:
+    - migration keys must be readable kebab-case
+    - automatic migrations must log the migration key and timestamp
+
+module_registration_flow:
+  steps:
+    - define module type in yaml
+    - assign approved capability_keys
+    - define settings_schema_key and state_schema_key
+    - define command_contracts and event_contracts
+    - define adapter_key and lifecycle hooks
+    - declare package manifest and runner contract if the module is backed by an external runtime
+    - define ai manifest with semantic description, examples, and compatibility hints
+    - declare cli_mode if the module is cli-aware
+    - define migration policy if replacing an existing schema version
+    - only then add the module to module-catalog.yaml
+  gate_rules:
+    - a module type without command and event contracts cannot be registered
+    - a module type without capability declaration cannot be registered
+    - a module type without explicit lifecycle cannot be registered
+
+command_contract_schema:
+  required_fields:
+    - command_key
+    - payload_schema_key
+    - retry_mode
+    - timeout_ms
+    - capability_required
+    - ack_required
+  example:
+    command_key: terminal.write
+    payload_schema_key: payload-terminal-write-v1
+    retry_mode: retry-with-dedup-key
+    timeout_ms: 10000
+    capability_required: capability-command-execute
+    ack_required: true
+
+event_contract_schema:
+  required_fields:
+    - event_key
+    - payload_schema_key
+    - delivery_mode
+    - ordering
+  delivery_mode_values:
+    - best-effort
+    - guaranteed-in-process
+  ordering_values:
+    - unordered
+    - per-module-ordered
+  example:
+    event_key: terminal.output.chunk
+    payload_schema_key: payload-terminal-output-v1
+    delivery_mode: guaranteed-in-process
+    ordering: per-module-ordered
+
+built_in_module_sdk:
+  browser:
+    module_type: browser
+    category: native-surface
+    runtime_class: browser-surface
+    adapter_key: adapter-browser-webcontents
+    capability_keys:
+      - capability-native-view
+      - capability-session-create
+      - capability-session-resume
+      - capability-navigation
+      - capability-selection-read
+      - capability-stream-output
+      - capability-log-stream
+      - capability-download-manage
+      - capability-permission-observe
+      - capability-network-observe
+    settings_schema_key: schema-browser-standard-v1
+    state_schema_key: state-browser-session-v1
+    command_contracts:
+      - browser.navigate
+      - browser.reload
+      - browser.go-back
+      - browser.go-forward
+      - browser.capture-selection
+    event_contracts:
+      - browser.page.loaded
+      - browser.navigation.failed
+      - browser.console.emitted
+      - browser.download.requested
+      - browser.permission.requested
+      - browser.popup.blocked
+      - browser.process.crashed
+      - browser.selection.captured
+      - browser.session.suspended
+    lifecycle_contract: lifecycle-native-view-v1
+  terminal:
+    module_type: terminal
+    category: session-stream
+    runtime_class: terminal-surface
+    adapter_key: adapter-terminal-pty
+    capability_keys:
+      - capability-render-ui
+      - capability-session-create
+      - capability-session-resume
+      - capability-session-destroy
+      - capability-command-execute
+      - capability-stream-output
+      - capability-cli-context-read
+      - capability-cli-command-template
+    settings_schema_key: schema-terminal-standard-v1
+    state_schema_key: state-terminal-session-v1
+    cli_mode: inherit
+    cli_resolution_policy: use-effective-cli-from-owner-scope
+    command_contracts:
+      - terminal.write
+      - terminal.resize
+      - terminal.signal
+    event_contracts:
+      - terminal.output.chunk
+      - terminal.session.exited
+      - terminal.session.suspended
+    lifecycle_contract: lifecycle-session-stream-v1
+
+adapter_examples:
+  adapter-browser-webcontents:
+    adapter_key: adapter-browser-webcontents
+    adapter_name: WebContents Browser Adapter
+    owned_module_types:
+      - browser
+    input_contracts:
+      - browser.navigate
+      - browser.reload
+    output_contracts:
+      - browser.page.loaded
+      - browser.console.emitted
+      - browser.download.requested
+      - browser.permission.requested
+      - browser.popup.blocked
+      - browser.selection.captured
+    lifecycle_hooks:
+      - validate-config
+      - create-instance
+      - attach-surface
+      - start-instance
+      - handle-command
+      - snapshot-state
+      - suspend-instance
+      - resume-instance
+      - destroy-instance
+    failure_modes:
+      - navigation-blocked
+      - permission-denied
+      - session-create-failed
+  adapter-terminal-pty:
+    adapter_key: adapter-terminal-pty
+    adapter_name: PTY Terminal Adapter
+    owned_module_types:
+      - terminal
+    input_contracts:
+      - terminal.write
+      - terminal.resize
+      - terminal.signal
+    output_contracts:
+      - terminal.output.chunk
+      - terminal.session.exited
+    lifecycle_hooks:
+      - validate-config
+      - create-instance
+      - attach-surface
+      - start-instance
+      - handle-command
+      - snapshot-state
+      - suspend-instance
+      - resume-instance
+      - destroy-instance
+    failure_modes:
+      - pty-create-failed
+      - shell-start-failed
+      - resize-failed
+
+future_module_examples:
+  pdf-viewer:
+    adapter_shape: native-surface or renderer-ui
+    must_declare:
+      - whether it emits selection events
+      - whether it opens files directly or through host mediation
+      - whether it supports session restore
+  ai-assistant:
+    adapter_shape: renderer-ui plus service bridge
+    must_declare:
+      - provider capability keys
+      - cli inheritance strategy if local cli execution is supported
+      - streaming event contracts
+      - retry and timeout policy
+      - transcript persistence scope
+
+external_runtime_binding:
+  purpose: >
+    External packages may be implemented in any language, but their launch,
+    transport, and observability rules must be declared in
+    08-external-module-runtime.yaml.
+  rules:
+    - sdk-level command and event contracts stay language-neutral
+    - runtime-specific details live in package manifests and runtime profiles
+    - packages with no native progress reporting must still satisfy minimum lifecycle visibility through adapter synthesis
+
+ai_manifest_binding:
+  purpose: >
+    Every module type must provide an ai-facing manifest so planners can choose,
+    explain, and compose modules without guessing from runtime schema names.
+  rules:
+    - ai_manifest_key is required for every module type
+    - ai manifests must not contradict runtime contracts
+    - semantic capability tags and compatibility hints are required before ai automation is enabled
+
+acceptance_checklist:
+  before_implementation:
+    - module type yaml exists
+    - capability list approved
+    - command contracts approved
+    - event contracts approved
+    - schema versions named
+    - adapter lifecycle declared
+    - migration policy declared if needed
+  before_release:
+    - ack and error paths tested
+    - retry behavior tested
+    - suspend and resume tested
+    - destroy cleanup tested
+    - worklog updated

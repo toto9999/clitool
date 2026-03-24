@@ -1,0 +1,82 @@
+version: 0.1.0
+
+document:
+  key: trust-and-package-source-policy
+  status: active
+  purpose: >
+    Define which external package sources, registries, binaries, Skills, MCPs,
+    and reference code origins are trusted enough to enter the project and
+    under what controls.
+  extends:
+    - doc/3. Platform/08-external-module-runtime.yaml
+    - doc/3. Platform/18-global-cli-textual-foundation.yaml
+    - doc/3. Platform/20-secret-and-credential-management.yaml
+
+decision-summary:
+  - every external dependency source must have an origin and trust level
+  - project runtime installs are isolated and pinned
+  - downloaded binaries require stronger provenance than ordinary registry packages
+  - ref libraries are analysis sources and must retain origin and license metadata
+  - Skills and MCP attachments are not trusted implicitly just because they are convenient
+
+trust-levels:
+  - approved-internal
+  - approved-external
+  - experimental-local
+  - denied
+
+source-classes:
+  - npm-registry-package
+  - pypi-package
+  - go-module
+  - direct-binary-download
+  - skill-source
+  - mcp-source
+  - reference-library
+
+rules:
+  package-managers:
+    node:
+      default: corepack plus pnpm
+      requirements:
+        - lockfile required
+        - pinned versions required
+    python:
+      default: uv
+      requirements:
+        - lockfile or equivalent resolved dependency record required
+        - pinned versions required
+    go:
+      default: go modules
+      requirements:
+        - go.mod and go.sum required
+  direct-downloads:
+    requirements:
+      - source URL recorded
+      - version or release tag recorded
+      - checksum or equivalent integrity record required
+      - executable origin reviewed before automation use
+  skills-and-mcp:
+    requirements:
+      - source origin recorded
+      - permission scope declared
+      - project attachment explicit
+      - denied by default if provenance is unclear
+  reference-libraries:
+    requirements:
+      - origin repository recorded
+      - license or usage note recorded
+      - analysis purpose recorded
+      - not linked directly as the product implementation
+
+forbidden:
+  - unpinned production dependency installs
+  - curl-or-paste install flows with no recorded provenance
+  - silent global tool installs from project automation without reviewed policy
+  - importing opaque binaries into project runtime with no integrity record
+
+operational-policy:
+  - prefer project-scoped runtime installs over global machine mutation
+  - package installation actions must pass the permission matrix
+  - registry credentials must come from secret_ref resolution, never plaintext workspace config
+  - AI may recommend packages, but trust approval stays a human or reviewed policy decision

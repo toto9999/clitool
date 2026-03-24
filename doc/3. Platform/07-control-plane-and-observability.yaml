@@ -1,0 +1,552 @@
+version: 0.1.0
+
+control_plane_scope:
+  purpose: >
+    Define the unified control plane so GUI, global CLI, project CLI, skills,
+    MCP integrations, modules, and runtime services all use the same named
+    actions, the same policy gates, and the same replayable yaml log trail.
+  status: draft-authoritative
+  extends:
+    - doc/3. Platform/05-system-contracts.yaml
+    - doc/3. Platform/06-module-sdk.yaml
+
+principles:
+  - every stable app behavior must be addressable as a readable action contract
+  - gui, cli, skill, and mcp are controller surfaces, not privileged side channels
+  - runtime-host is the single policy and routing gateway for action execution
+  - skills and mcp integrations are attached declaratively to projects and scopes
+  - every action, event, and policy decision must be loggable in yaml form
+  - logs must support replay and analysis without opaque ids or hidden mutation
+  - controllers may differ in presentation, but not in behavioral authority model
+
+control_plane_model:
+  controllers:
+    - controller_type: global-cli
+      purpose: invoke any registered action with explicit scope arguments
+    - controller_type: project-cli
+      purpose: invoke the same actions with implicit project scope defaults
+    - controller_type: gui
+      purpose: user-facing buttons, menus, shortcuts, and forms
+    - controller_type: module-ui
+      purpose: module-local interactions that still dispatch named actions
+    - controller_type: skill
+      purpose: attached automation packages that request actions through the host
+    - controller_type: mcp
+      purpose: attached tool and resource providers invoked through the host
+    - controller_type: system-automation
+      purpose: scheduled or rule-driven internal automation
+  gateway:
+    owner: runtime-host-control-plane
+    responsibilities:
+      - resolve action catalog entries
+      - evaluate project and scope policy
+      - resolve effective cli and attachment context
+      - route actions to host services, module adapters, skills, or mcp bridges
+      - emit ack, result, and derived event records
+      - persist action, event, and audit logs
+  executors:
+    - host-service
+    - module-adapter
+    - skill-runner
+    - mcp-bridge
+    - policy-engine
+  observers:
+    - action-log-writer
+    - event-log-writer
+    - audit-log-writer
+    - analysis-projector
+    - execution-trace-normalizer
+
+scope_model:
+  scopes:
+    - global
+    - workspace
+    - project
+    - tab
+    - module
+    - session
+  inheritance_rules:
+    - broader controllers may target narrower scopes only through declared policy
+    - project attachments inherit project policy unless narrowed at tab or module scope
+    - tab and module scopes never bypass project policy inheritance
+    - cross-project actions require an explicit global policy allow rule
+
+storage_contract:
+  purpose: >
+    Extend the core workspace storage with registries, attachments, and
+    append-only log buckets for control-plane activity.
+  durable_files:
+    - path: workspace/skills-registry.yaml
+      purpose: globally available skill definitions and execution metadata
+    - path: workspace/mcp-registry.yaml
+      purpose: globally available mcp server definitions and bridge metadata
+    - path: workspace/projects/<project_key>/attachments.yaml
+      purpose: project-scoped skill and mcp attachments plus action exposure policy
+    - path: workspace/logs/actions/<scope_key>/<bucket_key>.yaml
+      purpose: append-only action request, ack, and completion records
+    - path: workspace/logs/events/<scope_key>/<bucket_key>.yaml
+      purpose: append-only domain and runtime event records
+    - path: workspace/logs/audit/<scope_key>/<bucket_key>.yaml
+      purpose: append-only policy, permission, config, and replay audit records
+  volatile_files:
+    - path: workspace-state/analysis/<project_key>/projection-cache.yaml
+      purpose: rebuildable action and event analysis summaries
+    - path: workspace-state/replay/<project_key>/replay-session.yaml
+      purpose: in-progress replay checkpoints and dry-run state
+
+yaml_stream_policy:
+  record_format: multi-document-yaml
+  separator: "---"
+  bucket_strategy:
+    default_rotation: monthly
+    bucket_key_pattern: "bucket-<yyyy-mm>"
+    scope_examples:
+      - global
+      - proj-bridge-lab
+      - proj-bridge-lab-tab-analysis-01
+  rules:
+    - log buckets are append-only
+    - corrections are written as superseding records, not in-place rewrites
+    - every record must include created_at and a readable primary key
+    - logs remain valid yaml streams when concatenated by bucket
+
+registry_model:
+  skill_registry:
+    location: workspace/skills-registry.yaml
+    required_fields:
+      - skill_key
+      - display_name
+      - source_kind
+      - execution_mode
+      - capability_keys
+      - action_contracts
+      - result_schema_keys
+      - default_cli_profile_key
+      - permission_policy_key
+    source_kind_values:
+      - local-package
+      - local-script
+      - managed-runner
+    execution_mode_values:
+      - sync-request
+      - async-job
+      - streaming-session
+    rules:
+      - a skill cannot be attached to a project unless it exists in the global registry
+      - every skill action surface must map to named control-plane actions
+      - skills never write durable project yaml directly
+  mcp_registry:
+    location: workspace/mcp-registry.yaml
+    required_fields:
+      - mcp_server_key
+      - display_name
+      - bridge_mode
+      - launch_reference
+      - tool_contracts
+      - resource_contracts
+      - prompt_contracts
+      - secret_refs
+      - permission_policy_key
+    bridge_mode_values:
+      - host-managed-stdio
+      - host-managed-http
+      - service-bridge
+    rules:
+      - an mcp server cannot be attached to a project unless it exists in the global registry
+      - mcp tools and resources must be projected into named control-plane actions or queries
+      - mcp integrations never bypass host policy and audit logging
+
+project_attachment_schema:
+  attachments_file:
+    location: workspace/projects/<project_key>/attachments.yaml
+    required_fields:
+      - project_key
+      - enabled_skill_attachments
+      - enabled_mcp_attachments
+      - action_exposure_policy
+      - controller_defaults
+    optional_fields:
+      - tab_attachment_overrides
+      - module_attachment_overrides
+    skill_attachment_fields:
+      - attachment_key
+      - skill_key
+      - attachment_scope
+      - cli_profile_key
+      - enabled_actions
+      - policy_key
+      - surface_modes
+    mcp_attachment_fields:
+      - attachment_key
+      - mcp_server_key
+      - attachment_scope
+      - enabled_tools
+      - enabled_resources
+      - policy_key
+      - surface_modes
+    controller_defaults:
+      required_fields:
+        - default_gui_actions
+        - default_cli_actions
+        - default_skill_targets
+        - default_mcp_targets
+    rules:
+      - attachments are declarative and project-owned
+      - attachments may be disabled without deleting their registry definitions
+      - attachment_scope values must be readable and explicit
+      - surface_modes describe where the attachment is visible, not what it can secretly do
+
+action_catalog_model:
+  purpose: >
+    Maintain one canonical catalog for stable actions so GUI, CLI, skills, and
+    mcp bridges all target the same behavior names.
+  catalog_sources:
+    - host actions
+    - module command projections
+    - skill actions
+    - mcp tool projections
+  naming_policy:
+    action_name_pattern: "<domain>.<verb>"
+    examples:
+      - project.open
+      - project.save
+      - tab.activate
+      - module.command
+      - skill.run
+      - mcp.tool.call
+      - log.analysis.refresh
+  rules:
+    - every stable user-facing behavior must map to one canonical action_name
+    - gui labels may vary, but action_name must remain stable
+    - global cli and project cli must invoke the same action_name, never a private duplicate
+    - deprecated actions remain readable until migration is complete
+
+action_contract:
+  required_fields:
+    - action_key
+    - trace_key
+    - action_name
+    - actor_type
+    - actor_key
+    - requested_scope
+    - target_kind
+    - target_key
+    - contract_key
+    - payload_schema_key
+    - requested_at
+  optional_fields:
+    - project_key
+    - tab_key
+    - module_key
+    - attachment_key
+    - causation_action_key
+    - replay_mode
+    - dry_run
+    - cli_profile_key
+  target_kind_values:
+    - host-service
+    - module
+    - skill
+    - mcp-tool
+    - mcp-resource
+    - analysis-job
+  rules:
+    - action_key and trace_key must follow readable key rules from 05-system-contracts.yaml
+    - every action must resolve to one contract_key and one payload schema
+    - causation_action_key links chained automations without hidden parent pointers
+    - dry_run must be explicit and preserved in logs
+
+control_plane_routing:
+  request_flow:
+    - controller submits action to runtime-host-control-plane
+    - policy-engine resolves scope, permissions, and attachment visibility
+    - context resolver calculates effective cli, project policy, and target references
+    - executor runs the action against host-service, module-adapter, skill-runner, or mcp-bridge
+    - observers persist action, event, and audit records
+    - result dispatcher returns ack, stream events if any, and final completion status
+  blocked_paths:
+    - gui -> module-adapter direct call without control plane
+    - global-cli -> filesystem mutation without control-plane action
+    - skill -> project yaml direct write without host-managed save action
+    - mcp -> module direct invocation without runtime-host mediation
+  rules:
+    - the control plane owns action dispatch even for local-only gui actions
+    - module bus commands are execution-level contracts beneath the control plane
+    - a control action may project into one or more module-bus commands, but the top-level action remains the audit root
+    - ai planners must use 09-ai-usable-module-manifest.yaml and binding policies before auto-composing actions
+    - browser automation requested from terminal cli or mcp must still enter through named control actions defined in 12-browser-automation-and-playwright-mcp.yaml
+
+controller_projection_policy:
+  gui_projection:
+    rules:
+      - every persistent gui action button, menu item, or shortcut must reference an action_name
+      - gui components may collect form data, but execution always dispatches a control action
+  global_cli_projection:
+    rules:
+      - every stable action must be invokable from global cli with explicit scope arguments
+      - cli help must be generated from the same action catalog, not hand-maintained duplicates
+  project_cli_projection:
+    rules:
+      - project cli invokes the same action catalog with implicit project defaults
+      - project cli may narrow visible actions by project attachment policy
+  skill_projection:
+    rules:
+      - skills request actions through named contracts, not hidden host methods
+      - skill outputs that trigger follow-up actions must emit causation_action_key
+  mcp_projection:
+    rules:
+      - mcp tools and resources are exposed as named actions or queries through the control plane
+      - mcp responses that lead to host mutations must always produce audit records
+
+policy_engine_model:
+  policy_inputs:
+    - actor_type
+    - actor_key
+    - requested_scope
+    - target_kind
+    - target_key
+    - attachment_key
+    - capability_keys
+    - effective_cli
+  policy_outputs:
+    - allow
+    - require-confirmation
+    - deny
+    - require-dry-run
+  rules:
+    - policy evaluation decisions must emit audit records
+    - destructive actions may require confirmation even when technically allowed
+    - attachment policy may narrow scope but never broaden it past project ownership
+
+observability_model:
+  required_streams:
+    - action-log
+    - event-log
+    - audit-log
+  correlation_fields:
+    - trace_key
+    - action_key
+    - causation_action_key
+    - project_key
+    - tab_key
+    - module_key
+    - attachment_key
+  rules:
+    - every accepted action must be visible in action-log
+    - meaningful state changes and executor emissions must appear in event-log
+    - policy decisions, config mutations, replay runs, and security-relevant outcomes must appear in audit-log
+    - log omission for stable actions is treated as a contract violation
+    - event normalization for silent or text-only packages must follow 08-external-module-runtime.yaml
+
+action_log_contract:
+  record_types:
+    - requested
+    - acknowledged
+    - completed
+  required_fields:
+    - action_key
+    - trace_key
+    - record_type
+    - action_name
+    - actor_type
+    - actor_key
+    - target_kind
+    - target_key
+    - status
+    - created_at
+  status_examples:
+    - accepted
+    - rejected
+    - success
+    - error
+    - timeout
+    - cancelled
+
+event_log_contract:
+  required_fields:
+    - event_record_key
+    - trace_key
+    - event_name
+    - source_kind
+    - source_key
+    - payload_schema_key
+    - created_at
+  source_kind_values:
+    - host-service
+    - module
+    - skill
+    - mcp
+    - policy-engine
+
+audit_log_contract:
+  required_fields:
+    - audit_key
+    - trace_key
+    - audit_kind
+    - actor_key
+    - policy_key
+    - outcome
+    - created_at
+  audit_kind_values:
+    - policy-decision
+    - config-change
+    - security-check
+    - auth-flow
+    - replay-run
+    - attachment-change
+  outcome_values:
+    - allowed
+    - confirmed
+    - denied
+    - superseded
+
+analysis_projection_model:
+  rebuildable_outputs:
+    - workspace-state/analysis/<project_key>/action-summary.yaml
+    - workspace-state/analysis/<project_key>/failure-summary.yaml
+    - workspace-state/analysis/<project_key>/trace-index.yaml
+    - workspace-state/analysis/<project_key>/attachment-usage.yaml
+    - workspace-state/analysis/<project_key>/auth-summary.yaml
+  rules:
+    - projections are caches and can always be rebuilt from durable logs
+    - exported reports may be saved durably, but must reference source bucket keys
+    - analysis views must preserve readable action and trace keys
+    - auth-related logs must retain auditability while redacting token-bearing fields
+
+auth_flow_observability_contract:
+  supported_flow_kinds:
+    - oauth-code-pkce
+    - oidc-code-pkce
+    - saml-browser-redirect
+    - device-code
+    - manual-secret-entry
+  required_audit_fields:
+    - auth_session_key
+    - auth_provider_key
+    - auth_flow_kind
+    - auth_surface
+    - callback_mode
+    - redirect_uri_label
+    - redaction_status
+  recommended_event_names:
+    - auth.started
+    - auth.browser-opened
+    - auth.callback-received
+    - auth.exchange-started
+    - auth.exchange-succeeded
+    - auth.exchange-failed
+    - auth.cancelled
+    - auth.expired
+  normalization_rules:
+    - provider-specific error payloads must be normalized into readable outcome codes and summaries
+    - raw auth codes, tokens, cookies, device codes, and callback query strings must never enter durable logs
+    - callback logs should preserve provider, route, and correlation context without preserving secrets
+    - auth logs must be analyzable by provider class, callback mode, and outcome without exposing credential-bearing values
+
+replay_contract:
+  purpose: >
+    Allow deterministic review and selective re-execution of logged behavior
+    without inventing a second execution model.
+  replay_modes:
+    - dry-run
+    - side-effect-safe
+    - full-with-confirmation
+  required_inputs:
+    - source_bucket_keys
+    - source_trace_keys
+    - replay_mode
+    - replay_reason
+  rules:
+    - replay uses the same action catalog and policy engine as live execution
+    - destructive actions cannot run in full mode without confirmation audit
+    - replay runs must emit new trace_key values and preserve source_trace_keys for comparison
+
+example_files:
+  skills_registry_yaml:
+    skills:
+      - skill_key: skill-docs-collector
+        display_name: Docs Collector
+        source_kind: local-package
+        execution_mode: async-job
+        capability_keys:
+          - capability-file-read
+          - capability-network-access
+        action_contracts:
+          - skill.run
+        result_schema_keys:
+          - payload-skill-run-result-v1
+        default_cli_profile_key: cli-global-default
+        permission_policy_key: policy-skill-readonly
+  mcp_registry_yaml:
+    servers:
+      - mcp_server_key: mcp-docs-search
+        display_name: Docs Search Bridge
+        bridge_mode: host-managed-stdio
+        launch_reference: bridge-mcp-docs-search
+        tool_contracts:
+          - mcp.tool.call
+        resource_contracts:
+          - mcp.resource.read
+        prompt_contracts: []
+        secret_refs: []
+        permission_policy_key: policy-mcp-readonly
+  attachments_yaml:
+    project_key: proj-bridge-lab
+    enabled_skill_attachments:
+      - attachment_key: attach-skill-docs-collector-01
+        skill_key: skill-docs-collector
+        attachment_scope: project
+        cli_profile_key: cli-project-bridge-lab
+        enabled_actions:
+          - skill.run
+        policy_key: policy-skill-readonly
+        surface_modes:
+          - gui
+          - project-cli
+    enabled_mcp_attachments:
+      - attachment_key: attach-mcp-docs-search-01
+        mcp_server_key: mcp-docs-search
+        attachment_scope: project
+        enabled_tools:
+          - docs.search
+        enabled_resources:
+          - docs.page
+        policy_key: policy-mcp-readonly
+        surface_modes:
+          - gui
+          - global-cli
+    action_exposure_policy:
+      require_global_cli_projection: true
+      require_gui_projection: true
+      require_logging: true
+    controller_defaults:
+      default_gui_actions:
+        - project.open
+        - project.save
+      default_cli_actions:
+        - project.open
+        - project.save
+        - mcp.tool.call
+      default_skill_targets:
+        - project
+      default_mcp_targets:
+        - project
+  action_log_record:
+    action_key: act-project-0042
+    trace_key: trace-proj-bridge-lab-0001
+    record_type: requested
+    action_name: mcp.tool.call
+    actor_type: global-cli
+    actor_key: cli-global-default
+    target_kind: mcp-tool
+    target_key: attach-mcp-docs-search-01
+    status: accepted
+    created_at: 2026-03-23T18:10:00+09:00
+
+implementation_order:
+  - finalize this yaml and freeze the unified control-plane vocabulary
+  - extend the yaml loader and writer for skill and mcp registries plus project attachments
+  - implement action catalog resolution and controller projection rules
+  - implement action, event, and audit log writers with yaml stream buckets
+  - implement analysis projections and replay scaffolding
+  - wire gui, cli, skill, and mcp entry points to the same runtime-host action dispatcher

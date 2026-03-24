@@ -1,0 +1,455 @@
+version: 0.1.0
+
+ai_manifest_scope:
+  purpose: >
+    Define the AI-usable semantic layer above runtime contracts so an AI agent
+    can choose modules, understand intent, recommend bindings, estimate risk,
+    generate tests, and recover from errors without guessing from field names.
+  status: draft-authoritative
+  extends:
+    - doc/3. Platform/06-module-sdk.yaml
+    - doc/3. Platform/07-control-plane-and-observability.yaml
+    - doc/3. Platform/08-external-module-runtime.yaml
+
+principles:
+  - runtime contracts remain the execution source of truth
+  - ai manifests provide semantic meaning, usage guidance, and recommendation metadata
+  - ai-facing explanations may be richer than runtime contracts, but must never contradict them
+  - binding safety must be declared, not guessed from similar schema names
+  - examples, hints, and error recovery metadata are first-class ai planning inputs
+  - scope, context dependency, and surface type must be explicit for every module
+
+document_split:
+  runtime_contract:
+    purpose: strict execution rules consumed by the system
+    source_documents:
+      - doc/3. Platform/06-module-sdk.yaml
+      - doc/3. Platform/08-external-module-runtime.yaml
+    covers:
+      - inputs
+      - outputs
+      - actions
+      - events
+      - lifecycle
+      - transport
+      - runtime errors
+  ai_manifest:
+    purpose: semantic and planning metadata consumed by ai agents and recommendation engines
+    source_document: doc/3. Platform/09-ai-usable-module-manifest.yaml
+    covers:
+      - description
+      - capability tags
+      - examples
+      - usage hints
+      - compatibility
+      - recommended bindings
+      - latency and cost hints
+      - recovery hints
+
+storage_contract:
+  durable_files:
+    - path: workspace/module-ai-manifests.yaml
+      purpose: ai-facing semantic manifests for module types and external packages
+    - path: workspace/binding-policies.yaml
+      purpose: recommended, allowed, discouraged, and forbidden binding rules between capability families
+
+ai_manifest_schema:
+  location: workspace/module-ai-manifests.yaml
+  required_fields:
+    - ai_manifest_key
+    - module_type
+    - package_key
+    - runtime_contract_refs
+    - semantic_description
+    - capability_tags
+    - intent_hints
+    - lifecycle_summary
+    - execution_hints
+    - compatibility_hints
+    - scope_profile
+    - context_dependency
+    - surface_profile
+    - bindability
+    - error_taxonomy
+    - examples
+  optional_fields:
+    - common_patterns
+    - anti_patterns
+    - recommended_bindings
+    - validation_hints
+    - testing_hints
+    - ai_planning_notes
+  rules:
+    - every manifest must point to the runtime contract it explains
+    - semantic_description must explain what the module actually does, not just repeat a name
+    - manifests may be more verbose than runtime contracts because ai planning needs richer context
+
+semantic_description_contract:
+  required_fields:
+    - summary
+    - detailed_behavior
+  optional_fields:
+    - data_shape_notes
+    - assumptions
+    - exclusions
+  rules:
+    - descriptions must clarify what kind of transformation or side effect happens
+    - exclusions must say what the module does not do when confusion is likely
+
+capability_tag_contract:
+  purpose: make natural language routing easier for ai planners
+  rules:
+    - capability tags are semantic, not transport-specific
+    - tags should use short dotted verbs and nouns
+  examples:
+    - pdf.parse
+    - text.extract
+    - structure.normalize
+    - ai.context.feed
+    - schema.map
+    - cli.run
+    - browser.navigate
+
+compatibility_contract:
+  required_fields:
+    - accepted_input_capabilities
+    - emitted_output_capabilities
+    - recommended_downstream_targets
+    - incompatible_targets
+  optional_fields:
+    - requires_transform
+    - quality_notes
+  rules:
+    - compatibility must describe more than raw schema type equality
+    - recommended_downstream_targets are guidance for ai composition
+    - incompatible_targets must exist when common false-positive bindings are likely
+
+lifecycle_summary_contract:
+  required_fields:
+    - startup_mode
+    - shutdown_mode
+    - session_required
+  optional_fields:
+    - warmup_cost
+    - reuse_recommended
+    - restart_strategy
+  startup_mode_values:
+    - on-demand
+    - persistent
+    - attach-to-existing
+  shutdown_mode_values:
+    - immediate
+    - graceful
+    - host-managed
+
+execution_hints_contract:
+  required_fields:
+    - deterministic
+    - expected_latency_ms
+    - cost_tier
+  optional_fields:
+    - throughput_hint
+    - side_effect_level
+    - resource_profile
+  cost_tier_values:
+    - low
+    - medium
+    - high
+    - variable
+  side_effect_level_values:
+    - none
+    - local-state
+    - project-mutation
+    - external-side-effect
+  rules:
+    - values are planning hints and must remain conservative
+    - deterministic false means ai should avoid assuming identical outputs
+
+error_taxonomy_contract:
+  required_fields:
+    - error_code
+    - meaning
+    - retryable
+    - recovery_hint
+  optional_fields:
+    - likely_causes
+    - escalation_hint
+  rules:
+    - error codes must map back to runtime failures where possible
+    - recovery_hint should tell ai what safe next step is preferred
+
+example_contract:
+  purpose: example I/O improves mapping, testing, and prompt generation quality
+  required_fields:
+    - example_key
+    - scenario
+    - input
+    - output
+  optional_fields:
+    - intermediate_events
+    - failure_example
+    - notes
+  rules:
+    - examples should use realistic values
+    - at least one happy-path example is required
+    - complex modules should also provide one failure example
+
+intent_hint_contract:
+  required_fields:
+    - use_when
+    - avoid_when
+  optional_fields:
+    - prefer_before
+    - prefer_after
+    - ambiguity_notes
+  rules:
+    - use_when and avoid_when must be written as direct planning cues
+    - ambiguity_notes should warn when users often ask for a nearby but different tool
+
+scope_profile_contract:
+  required_fields:
+    - supported_scopes
+    - default_scope
+  optional_fields:
+    - scope_override_rules
+  rules:
+    - every manifest must say whether it is global, project, tab, or module oriented
+
+context_dependency_contract:
+  required_fields:
+    - cli_context
+    - project_state
+    - network_access
+  cli_context_values:
+    - required
+    - optional
+    - not-used
+    - overrideable
+  project_state_values:
+    - required
+    - optional
+    - isolated
+  network_access_values:
+    - required
+    - optional
+    - forbidden
+
+surface_profile_contract:
+  required_fields:
+    - surface_type
+    - interaction_model
+  surface_type_values:
+    - worker
+    - ui
+    - hybrid
+  interaction_model_values:
+    - fire-and-forget
+    - request-response
+    - streaming
+    - interactive-session
+
+bindability_contract:
+  required_fields:
+    - inbound_capabilities
+    - outbound_capabilities
+    - recommended_binding_modes
+  optional_fields:
+    - discouraged_binding_modes
+    - forbidden_binding_modes
+  recommended_binding_mode_values:
+    - direct-payload-pass
+    - transform-then-pass
+    - context-enrichment
+    - human-confirmed
+
+binding_policy_schema:
+  location: workspace/binding-policies.yaml
+  required_fields:
+    - binding_policy_key
+    - from_capability
+    - to_capability
+    - compatibility_status
+    - rationale
+  optional_fields:
+    - transform_requirements
+    - validation_rules
+    - recommendation_score
+    - human_confirmation_required
+    - notes
+  compatibility_status_values:
+    - recommended
+    - allowed
+    - discouraged
+    - forbidden
+  rules:
+    - recommendation_score is guidance, not an execution command
+    - forbidden bindings must explain why the ai should not choose them
+
+ai_planning_rules:
+  rules:
+    - ai must prefer manifests and binding policies over name-based guessing
+    - if multiple modules share a capability tag, ai should compare determinism, latency, cost, and scope fit
+    - if a requested workflow touches a forbidden binding, ai must not auto-wire it
+    - if compatible targets require transforms, ai must include the transform step explicitly in the plan
+    - if retryable is false, ai should prefer validation or fallback over blind retry
+
+recommended_metadata_layers:
+  structure_layer:
+    - inputs
+    - outputs
+    - events
+    - actions
+  meaning_layer:
+    - semantic_description
+    - capability_tags
+    - examples
+    - intent_hints
+  policy_layer:
+    - lifecycle_summary
+    - permissions
+    - determinism
+    - latency
+    - cost_tier
+    - compatibility
+    - validation_rules
+    - retryability
+
+example_manifests:
+  pdf_parser:
+    ai_manifest_key: ai-pdf-parser-standard
+    module_type: automation-lib
+    package_key: package-python-pdf-parser
+    runtime_contract_refs:
+      - package-python-pdf-parser
+      - schema-pdf-parser-runtime-v1
+    semantic_description:
+      summary: Parses PDF files into normalized text blocks for downstream extraction and mapping.
+      detailed_behavior: >
+        Reads a PDF file, extracts textual content, preserves rough block boundaries,
+        and emits normalized text segments suitable for schema mapping or ai context loading.
+      exclusions:
+        - does not render the PDF visually for end-user reading
+        - does not guarantee OCR on image-only PDFs unless OCR support is declared separately
+    capability_tags:
+      - pdf.parse
+      - text.extract
+      - structure.normalize
+    intent_hints:
+      use_when:
+        - You need raw or normalized text from a PDF file
+        - You need structured content before schema mapping or ai extraction
+      avoid_when:
+        - You only need to render a PDF visually
+        - You need high-fidelity layout editing rather than text extraction
+      ambiguity_notes:
+        - image-only PDF files may require a dedicated OCR module instead
+    lifecycle_summary:
+      startup_mode: on-demand
+      shutdown_mode: graceful
+      session_required: false
+      reuse_recommended: true
+    execution_hints:
+      deterministic: false
+      expected_latency_ms: 3000
+      cost_tier: medium
+      side_effect_level: none
+    compatibility_hints:
+      accepted_input_capabilities:
+        - file.pdf
+      emitted_output_capabilities:
+        - text.normalized
+        - structure.blocks
+      recommended_downstream_targets:
+        - ai.context.feed
+        - schema.input.raw-text
+      incompatible_targets:
+        - browser.render-only
+    scope_profile:
+      supported_scopes:
+        - project
+        - tab
+        - module
+      default_scope: module
+    context_dependency:
+      cli_context: optional
+      project_state: optional
+      network_access: forbidden
+    surface_profile:
+      surface_type: worker
+      interaction_model: request-response
+    bindability:
+      inbound_capabilities:
+        - file.pdf
+      outbound_capabilities:
+        - text.normalized
+        - structure.blocks
+      recommended_binding_modes:
+        - transform-then-pass
+        - context-enrichment
+      discouraged_binding_modes:
+        - direct-payload-pass
+    error_taxonomy:
+      - error_code: INVALID_INPUT
+        meaning: file path is missing or unreadable
+        retryable: false
+        recovery_hint: validate file existence and permissions before retry
+      - error_code: TIMEOUT
+        meaning: parsing exceeded expected runtime window
+        retryable: true
+        recovery_hint: retry with smaller input or extended timeout
+      - error_code: PARSE_FAILED
+        meaning: parser could not extract usable text
+        retryable: false
+        recovery_hint: fallback to OCR-capable parser if the PDF appears image-based
+    examples:
+      - example_key: example-pdf-parser-happy-01
+        scenario: extract normalized text for ai context
+        input:
+          filePath: C:/docs/spec.pdf
+        output:
+          parsedText: "Section 1..."
+          blockCount: 42
+    common_patterns:
+      - parse PDF then feed normalized text into ai context preparation
+      - parse PDF then map selected sections into schema input fields
+    anti_patterns:
+      - using the parser when only visual preview is needed
+      - assuming OCR is always included
+    recommended_bindings:
+      - output_capability: text.normalized
+        target_capability: ai.context.feed
+        rationale: ai context modules usually expect cleaned text rather than raw binary files
+    validation_hints:
+      - check file extension and file existence before dispatch
+      - detect image-only PDFs early if OCR is not supported
+    testing_hints:
+      - include one text-based PDF and one image-only PDF in regression tests
+    ai_planning_notes:
+      - if the user asks for visual reading or annotation, prefer a pdf-viewer module instead
+
+example_binding_policies:
+  pdf_text_to_ai_context:
+    binding_policy_key: bind-policy-pdf-text-to-ai-context
+    from_capability: text.normalized
+    to_capability: ai.context.feed
+    compatibility_status: recommended
+    rationale: normalized text is a strong upstream source for ai context construction
+    transform_requirements:
+      - text.truncate-if-needed
+      - metadata.attach-source-ref
+    validation_rules:
+      - source text must be non-empty
+  pdf_text_to_visual_viewer:
+    binding_policy_key: bind-policy-pdf-text-to-visual-viewer
+    from_capability: text.normalized
+    to_capability: pdf.render
+    compatibility_status: forbidden
+    rationale: parsed text cannot reconstruct a visual pdf viewer surface safely
+    human_confirmation_required: false
+
+implementation_order:
+  - finalize this yaml and freeze ai manifest vocabulary
+  - add module-ai-manifests and binding-policies registries to the loader layer
+  - require ai_manifest_key on module catalog items and external package manifests
+  - implement recommendation and binding validation using capability tags and policy rules
+  - expose ai planning metadata to gui assistants, cli planners, and test generators

@@ -1,0 +1,396 @@
+version: 0.1.0
+
+foundation_scope:
+  purpose: >
+    Define the concrete foundation for the embedded browser, terminal, runtime
+    language execution, package installation, and IDE-like workspace so the app
+    can be planned as a safe desktop workbench instead of an underspecified web shell.
+  status: draft-authoritative
+  extends:
+    - doc/3. Platform/04-runtime-platform-plan.md
+    - doc/3. Platform/05-system-contracts.yaml
+    - doc/3. Platform/06-module-sdk.yaml
+    - doc/3. Platform/08-external-module-runtime.yaml
+
+non_goals:
+  - do not promise that every public website will work perfectly in the embedded browser
+  - do not promise full vscode parity in the first ide-like release
+  - do not expose node or electron powers directly to arbitrary remote web content
+
+browser_foundation:
+  embedding_strategy:
+    primary_surface: WebContentsView
+    rationale:
+      - remote sites should live in a native browser surface, not an iframe inside the renderer
+      - security boundaries must remain in the electron main and session layers
+  compatibility_model:
+    target: broad best-effort website compatibility under strong sandboxing
+    not_guaranteed:
+      - drm-dependent media services
+      - extension-required workflows
+      - sites that block embedded or automated browsers
+      - special enterprise certificate or device-bound login flows
+    rules:
+      - say broad compatibility, not universal compatibility
+      - compatibility exceptions must be surfaced as known limitations, not hidden failures
+  security_baseline:
+    remote_content_rules:
+      - nodeIntegration off
+      - contextIsolation on
+      - sandbox on
+      - no direct preload bridge for arbitrary remote origins
+      - per-project or per-module session partitioning
+      - permission requests denied by default unless policy explicitly allows
+      - popup creation blocked by default unless routed by host policy
+      - certificate errors are not auto-bypassed
+      - downloads are host-mediated and saved only through approved paths
+    trusted_content_rules:
+      - first-party or explicitly trusted pages may use a separate trusted partition
+      - trusted pages may receive a limited preload bridge with typed APIs only
+  supported_browser_logs:
+    event_streams:
+      - navigation started and completed
+      - navigation failed
+      - console messages
+      - download requested, approved, blocked, completed
+      - permission requested, approved, denied
+      - popup blocked or opened
+      - process crashed or unresponsive
+      - selected text captured
+    optional_diagnostics:
+      - network request summary via session.webRequest
+      - network trace capture via electron netLog when explicitly enabled
+    rules:
+      - browser logging must be opt-in where sensitive or noisy
+      - logs are host observations, not a page-side privileged bridge
+  browser_communications:
+    app_to_browser_commands:
+      - browser.navigate
+      - browser.reload
+      - browser.go-back
+      - browser.go-forward
+      - browser.capture-selection
+    browser_to_app_events:
+      - browser.page.loaded
+      - browser.navigation.failed
+      - browser.console.emitted
+      - browser.download.requested
+      - browser.permission.requested
+      - browser.popup.blocked
+      - browser.process.crashed
+      - browser.selection.captured
+    rules:
+      - remote pages do not talk to the app through a raw javascript bridge
+      - any trusted two-way bridge must be origin-scoped and policy-scoped
+      - browser automation for the product goal must target the currently visible WebContentsView through a host-owned bridge, not a separate automation browser
+  automation_prerequisites:
+    rules:
+      - a normal browsing surface is not automatically a full automation surface
+      - full browser automation requires a host-owned control backend such as webContents debugger or another reviewed host bridge
+      - when no approved control backend is attached, the browser surface is treated as browse-only plus limited host-observed inspection
+      - automation capability level must be explicit in policy and ui, not inferred from the mere presence of a browser module
+  auth_and_sensitive_flows:
+    default_policy:
+      - oauth, oidc, social login, enterprise sso, and other sensitive identity flows must prefer the external system browser
+      - the embedded browser surface must not be the default path for Google OAuth or other providers that disallow embedded user-agents
+      - browser modules may request an auth flow, but the runtime host decides whether to open the system browser
+    recommended_patterns:
+      - system browser launch via electron shell.openExternal
+      - authorization code with PKCE
+      - callback into the app by custom protocol or loopback redirect
+      - token exchange in host-owned service code only
+    callback_patterns:
+      preferred:
+        - clibase://auth/callback
+        - http://127.0.0.1:<port>/oauth/callback
+      rules:
+        - callback handlers must validate state and pkce verifier
+        - callback handlers must expire pending auth sessions aggressively
+    embedded_auth_exceptions:
+      allowed_only_when:
+        - provider policy explicitly allows embedded user-agents
+        - requested scopes are not sensitive or restricted
+        - the flow does not require security guarantees that depend on a trusted external browser context
+      rules:
+        - exceptions must be policy-declared, not ad-hoc
+        - google oauth is not in the default exception list
+    token_handling_rules:
+      - access tokens, refresh tokens, auth codes, and session cookies must never be written to general yaml config or plaintext worklogs
+      - auth query parameters and callback urls must be redacted in logs
+      - token storage must use host-managed secret storage or secret refs
+      - remote web pages must never receive direct access to host-side tokens
+    audit_requirements:
+      - auth flow started
+      - system browser opened
+      - callback received
+      - token exchange success or failure
+      - auth flow cancelled or expired
+    provider_notes:
+      google:
+        - use external browser by default because Google OAuth policies disallow embedded user-agents under the developer's control
+      generic_native_app_oauth:
+        - follow the native-app external user-agent pattern from RFC 8252
+    provider_class_matrix:
+      - provider_class_key: google-oauth
+        default_surface: system-browser-required
+        typical_protocol: oidc-authorization-code-pkce
+        callback_modes:
+          - loopback
+          - custom-protocol
+        embedded_policy: forbidden-by-default
+        token_exchange_owner: host-auth-service
+        notes:
+          - treat Google login as an external-browser-first flow unless an officially documented provider exception is reviewed and approved
+      - provider_class_key: generic-native-oauth
+        default_surface: system-browser-required
+        typical_protocol: oauth-authorization-code-pkce
+        callback_modes:
+          - loopback
+          - custom-protocol
+        embedded_policy: forbidden-by-default
+        token_exchange_owner: host-auth-service
+        notes:
+          - use this as the baseline for GitHub, Slack, and other third-party native-app OAuth flows unless a stricter provider policy exists
+      - provider_class_key: enterprise-sso-browser-redirect
+        default_surface: system-browser-required
+        typical_protocol: oidc-or-saml-browser-redirect
+        callback_modes:
+          - loopback
+          - custom-protocol
+          - post-login-manual-confirmation
+        embedded_policy: forbidden-by-default
+        token_exchange_owner: host-auth-service or enterprise bridge service
+        notes:
+          - assume stronger browser trust, certificate, device posture, or conditional access requirements
+          - if the provider cannot reliably return to the desktop app, support a manual confirmation step without weakening the policy
+      - provider_class_key: device-code
+        default_surface: no-embedded-login-page
+        typical_protocol: oauth-device-code
+        callback_modes:
+          - user-code-entry
+          - polling-session
+        embedded_policy: not-applicable
+        token_exchange_owner: host-auth-service
+        notes:
+          - use when browser redirect is unavailable or operationally awkward
+          - polling and expiry must be logged and rate-limited
+      - provider_class_key: manual-secret-entry
+        default_surface: no-browser-required
+        typical_protocol: api-key-or-personal-access-token
+        callback_modes:
+          - none
+        embedded_policy: not-applicable
+        token_exchange_owner: not-applicable
+        notes:
+          - accept only through host-managed secret entry ui
+          - tokens and keys are stored by secret reference, never in project yaml
+      - provider_class_key: local-dev-mock-auth
+        default_surface: embedded-or-system-browser-by-policy
+        typical_protocol: local-mock-oauth
+        callback_modes:
+          - loopback
+          - custom-protocol
+          - embedded-dev-only
+        embedded_policy: allowed-only-in-dev-and-non-sensitive-scopes
+        token_exchange_owner: host-auth-service
+        notes:
+          - never enable for production providers or sensitive scopes
+    callback_strategy_matrix:
+      default_order:
+        - prefer loopback callback for desktop-native auth when the provider registration allows it
+        - use custom protocol when loopback is impractical or the provider workflow is better served by deep-link return
+        - use manual confirmation only for enterprise edge cases that cannot reliably deep-link back
+      selection_rules:
+        - callback mode must be declared per auth provider, not chosen ad-hoc by a module
+        - redirect uri registrations must be visible in yaml and reviewable
+        - one provider may support multiple callback modes, but one auth session uses exactly one chosen mode
+        - callback handlers must emit the same normalized audit trail regardless of mode
+    auth_session_state_model:
+      states:
+        - pending-launch
+        - browser-opened
+        - callback-received
+        - exchange-running
+        - authenticated
+        - failed
+        - cancelled
+        - expired
+      required_runtime_fields:
+        - auth_session_key
+        - auth_provider_key
+        - flow_kind
+        - auth_surface
+        - callback_mode
+        - requested_scope_set_key
+        - state_key
+        - pkce_verifier_ref
+        - started_at
+        - expires_at
+        - status
+      rules:
+        - auth session state lives in runtime state, not durable project config
+        - pkce verifier values must be referenced through secret storage, not copied into plaintext yaml
+        - a failed or expired session may be inspected through normalized logs without exposing credential-bearing fields
+    provider_decision_rules:
+      - if the provider policy is unknown, classify it as system-browser-required until reviewed
+      - if the provider or scope set is marked sensitive, embedded auth is denied by default
+      - if the provider requires browser trust, device posture, or enterprise certificate handling, use external browser flow
+      - if a browser module requests auth, the host must resolve provider class and policy before launching anything
+      - production providers and local-dev-mock-auth flows must never share the same auth provider key or callback registration
+    auth_logging_policy:
+      allowed_audit_details:
+        - provider class
+        - chosen callback mode
+        - chosen auth surface
+        - requested scope set label
+        - start and finish timestamps
+        - normalized failure code
+      forbidden_log_details:
+        - raw auth code
+        - raw access token
+        - raw refresh token
+        - session cookie
+        - complete callback query string
+        - full authorization header value
+
+terminal_foundation:
+  renderer: xterm.js
+  backend: node-pty
+  process_host: electron utilityProcess or dedicated runtime worker
+  shell_strategy:
+    windows_default: pwsh
+    fallbacks:
+      - powershell.exe
+      - cmd.exe
+      - user-defined shell from runtime profile
+  supported_capabilities:
+    - multi-session terminals
+    - stdin write
+    - stdout and stderr stream
+    - resize
+    - signal and terminate
+    - cwd and env injection
+    - session restore best-effort
+    - terminal output logging
+  rules:
+    - terminal is a real pty-backed session, not a fake console widget
+    - shell launch must come from resolved runtime profile and effective cli context
+
+language_runtime_strategy:
+  objective: run code and tools from many languages inside the same workspace model
+  preferred_runtime_profiles:
+    python:
+      environment_manager: uv preferred, venv plus pip allowed as fallback
+      install_scope: project-scoped environment preferred
+      run_modes:
+        - python-process
+        - shell-command
+    node:
+      environment_manager: corepack plus pnpm preferred
+      install_scope: project-scoped workspace preferred
+      run_modes:
+        - node-process
+        - renderer-bundle
+        - shell-command
+    go:
+      environment_manager: system go toolchain
+      install_scope: project module and build cache
+      run_modes:
+        - go-binary
+        - shell-command
+    other_languages:
+      environment_manager: custom runtime profile
+      run_modes:
+        - shell-command
+        - native-executable
+  installation_policy:
+    rules:
+      - global package installs are discouraged by default
+      - project-scoped installs are preferred for reproducibility
+      - runtime profiles define bootstrap and install commands
+      - package-manager output must be normalized into execution logs
+      - secret-bearing registry auth must use secret refs, not inline credentials
+
+ide_like_workspace:
+  mvp_goal: >
+    Provide a practical workbench for editing files, running commands, opening
+    websites, reading logs, and orchestrating tools without attempting to clone
+    every feature of a full ide.
+  phase_1_tooling:
+    - monaco-editor for code editing
+    - custom file tree and search panel backed by host file service
+    - xterm.js plus node-pty for integrated terminal
+    - WebContentsView for embedded browser
+    - problems and logs panel backed by normalized event streams
+    - task runner panel backed by runtime profiles and package manifests
+  phase_2_extensions:
+    - lsp bridge over stdio for language servers
+    - debugger integration
+    - git diff and source control panels
+    - test explorer
+    - environment inspector
+  explicit_non_goals:
+    - arbitrary browser extension support
+    - full vscode extension marketplace compatibility
+    - unrestricted remote code execution without policy
+
+workspace_panels:
+  recommended_panels:
+    - file-tree
+    - editor
+    - terminal
+    - browser
+    - logs
+    - problems
+    - tasks
+  optional_panels:
+    - ai-assistant
+    - package-manager
+    - environment-status
+    - downloads
+
+state_and_storage_notes:
+  durable_preferences:
+    - browser home urls and trusted partitions
+    - terminal defaults and shell preferences
+    - editor preferences and panel layout presets
+  volatile_state:
+    - open editors and cursor positions
+    - focused panel
+    - browser current url and navigation stack
+    - terminal live sessions
+    - pending downloads
+
+security_and_observability_rules:
+  rules:
+    - browser, terminal, editor, and package-manager actions must all flow through the same control plane and logs
+    - sensitive diagnostics such as deep network trace must be explicitly enabled and auditable
+    - package installation is allowed only through declared runtime profiles or approved commands
+    - ide-like convenience must never weaken remote content isolation
+    - auth and identity logs must redact tokens, auth codes, cookies, and sensitive callback parameters
+
+implementation_choices:
+  browser:
+    use: electron WebContentsView
+  terminal:
+    use: xterm.js plus node-pty
+  editor:
+    use: monaco-editor
+  runtime_execution:
+    use:
+      - runtime profiles
+      - module packages
+      - external package runner layer
+  logs:
+    use:
+      - unified action-log
+      - event-log
+      - audit-log
+      - normalized browser and terminal event streams
+
+implementation_order:
+  - freeze this browser, terminal, and ide-like foundation
+  - extend browser sdk events and commands for logging and permissions
+  - add ide workspace volatile state storage
+  - implement browser and terminal services with observability first
+  - add monaco-based editor shell after runtime services are stable

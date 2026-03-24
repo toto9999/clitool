@@ -1,0 +1,205 @@
+version: 0.1.0
+
+document:
+  key: global-cli-textual-foundation
+  status: active
+  purpose: >
+    Fix the authoritative interactive Global CLI experience as a Textual-based
+    host, declare how upstream/reference CLI libraries under ref/ are analyzed
+    and reimplemented, and standardize multiline compose, link paste, image
+    paste, and attachment ingestion ergonomics for power-user automation
+    workflows.
+  extends:
+    - doc/1. Strategy/14-product-direction.md
+    - doc/1. Strategy/16-project-operating-model.md
+    - doc/3. Platform/04-runtime-platform-plan.md
+    - doc/3. Platform/07-control-plane-and-observability.yaml
+    - doc/3. Platform/17-central-architecture.md
+
+decision-summary:
+  - the authoritative interactive Global CLI host uses Textual rather than a React panel
+  - current src/app/components/panels/GlobalCLIPanel.tsx remains a temporary renderer-side prototype only
+  - reusable upstream CLI assets may live under ref/ as analysis sources, but product behavior must be reimplemented in owned code
+  - multiline compose, large paste, link paste, image paste, and notebook-originated image attachment are first-class Global CLI usability requirements
+  - convenience input must still go through the shared control plane and remain observable to GUI and AI
+
+global-cli-position:
+  role: >
+    The Global CLI is the primary operator-facing control surface for the
+    product. Project CLI contexts derive from it, and GUI or AI surfaces must
+    map back to the same action and CLI contract layer.
+  control-surface-priority:
+    1: textual interactive host
+    2: project-specific derived cli commands
+    3: gui configuration, observation, and debugging surfaces
+    4: ai action projection over the same contracts
+  authority-rules:
+    - stable features are incomplete until they can be driven from the Global CLI or a derived Project CLI
+    - gui shortcuts must not create hidden command paths that bypass cli contracts
+    - ai automation must use the same named actions and cli semantics rather than privileged side channels
+
+textual-host:
+  runtime:
+    language: python
+    framework: textual
+    delivery-modes:
+      - standalone terminal-first global cli app
+      - host-launched local tui session attached to the workspace
+  foundation-widgets:
+    - widget: TextArea
+      purpose: multiline compose, prompt drafting, large pasted text editing
+    - widget: Input
+      purpose: short command entry, quick filters, inline overrides
+    - widget: RichLog
+      purpose: streaming action output, event traces, rendered results
+    - widget: MarkdownViewer
+      purpose: readable markdown results, linked references, table of contents navigation
+    - widget: TabbedContent
+      purpose: split sessions, logs, help, preview, and attachment tabs
+    - widget: Header
+      purpose: workspace, project, and mode context
+    - widget: Footer
+      purpose: visible key hints, mode hints, and status affordances
+  required-layout:
+    - compose-pane: primary multiline authoring surface
+    - result-log-pane: stream output, events, and action feedback
+    - session-sidebar: project context, active profile, and action scope
+    - attachment-tray: pasted or selected files, images, notebook artifacts
+    - status-footer: mode, policy, attachment, and submit hints
+  ux-rules:
+    - compose is multiline-first rather than single-line-first
+    - paste must never auto-submit or auto-execute
+    - explicit submit action is required after compose review
+    - project context and effective cli profile must stay visible while composing
+    - attachment state must be visible before dispatch
+
+input-convenience:
+  supported-input-kinds:
+    - plain-text
+    - multiline-text
+    - raw-url
+    - markdown-link
+    - local-file-path
+    - clipboard-image
+    - notebook-exported-image
+    - dragged-file
+  multiline-compose:
+    requirements:
+      - preserve newlines and indentation
+      - keep bracketed paste behavior when the terminal supports it
+      - support safe editing before dispatch
+      - allow preview or summarization of very large pasted text without losing the original attachment reference
+  link-handling:
+    requirements:
+      - raw urls remain clickable and inspectable
+      - markdown links normalize into readable attachment or reference records
+      - pasted links must retain original source string for auditability
+  image-and-notebook-handling:
+    requirements:
+      - clipboard images and notebook-originated image files are treated as attachment ingestion, not raw text
+      - the compose area inserts a readable attachment token or reference instead of binary content
+      - the attachment tray keeps source metadata, file type, and capture time when available
+      - image inputs remain policy-checked and loggable before downstream ai or module use
+  safety-rules:
+    - paste content does not execute shell commands implicitly
+    - pasting a path or link does not auto-open external tools
+    - convenience input is normalized before control-plane dispatch
+
+attachment-ingestion:
+  normalized-record:
+    fields:
+      - attachment_key
+      - source_kind
+      - source_label
+      - mime_type
+      - local_cache_path
+      - preview_state
+      - capture_context
+  compose-behavior:
+    text-like-input:
+      result: insert directly into compose surface or create a preview-backed text attachment
+    url-like-input:
+      result: insert readable reference token and create a source record
+    binary-like-input:
+      result: create attachment record first, then insert readable attachment token
+  observability:
+    - attachment ingestion emits normalized actions and events
+    - gui, logs, and ai can inspect attachment metadata through the shared control plane
+    - pasted convenience data must remain replay-safe with redaction where needed
+
+reference-library-policy:
+  purpose: >
+    Keep upstream or vendor CLI assets close to the repository for reuse,
+    comparison, and design analysis without scattering ad-hoc copied code
+    through product source folders.
+  preferred-layout:
+    - ref/basic_reference
+    - ref/cli/<tool_key>
+    - ref/analysis/<tool_key>
+    - ref/examples/<tool_key>
+  rules:
+    - upstream library identity and source origin must remain traceable
+    - product code must not link reference libraries directly as the product implementation
+    - study upstream behavior, flows, and ergonomics, then reimplement them in owned product code
+    - do not paste upstream implementation ad hoc into src/ or future electron host folders
+    - store license, version note, and integration intent next to each reference library when practical
+    - reference libraries are analysis inputs to the product, not hidden product runtime dependencies
+  initial-candidates:
+    - tool_key: gemini-cli
+      upstream_source: https://github.com/google-gemini/gemini-cli
+      integration-value:
+        - terminal-first ai agent UX reference
+        - command ergonomics and session flow reference
+        - headless json or stream-json output behavior reference
+
+control-plane-integration:
+  requirements:
+    - textual compose and submit actions must project into the same control plane used by gui and ai
+    - product reimplementations inspired by reference libraries must emit normalized action, event, and audit records
+    - convenience input normalization must happen before action dispatch
+    - project cli derivation and effective profile resolution stay outside the textual widget layer
+  non-goals:
+    - textual widgets do not own policy decisions
+    - textual widgets do not bypass attachment logging
+    - textual widgets do not talk directly to browser or terminal modules without a control-plane contract
+
+current-state:
+  current-authoritative-host: none
+  current-prototype-surface: src/app/components/panels/GlobalCLIPanel.tsx
+  assessment:
+    - renderer-side mock categories and canned output only
+    - no real project cli derivation
+    - no attachment ingestion pipeline
+    - no formal ref library analysis and reimplementation workflow yet
+    - no textual host implementation yet
+
+target-state:
+  required-foundation:
+    - textual cli host skeleton
+    - attachment normalization service
+    - ref library analysis catalog
+    - shared control-plane dispatch for gui and cli
+    - observable paste and attachment actions
+  completion-check:
+    - power users can comfortably compose multiline commands and prompts
+    - links and images can be pasted without falling back to manual file plumbing
+    - upstream cli references can be staged under ref/ and turned into owned product code without ad-hoc source copying
+    - ai can trigger equivalent actions programmatically through the same contracts
+
+implementation-notes:
+  source-backed:
+    - Textual documents TextArea, Input, RichLog, MarkdownViewer, and App-level URL opening behavior suitable for a terminal-first interactive host foundation
+    - Gemini CLI is publicly documented as a terminal-first AI agent with MCP support and structured output modes, making it a strong upstream reference candidate
+  explicit-inference:
+    - image or notebook clipboard capture should be treated as a host integration requirement layered around Textual, not assumed as magic built directly into a widget
+    - binary attachment ingestion needs reviewed local caching and redaction policy before downstream automation uses it
+
+references:
+  textual:
+    - https://textual.textualize.io/widgets/text_area/
+    - https://textual.textualize.io/widgets/input/
+    - https://textual.textualize.io/widgets/rich_log/
+    - https://textual.textualize.io/widgets/markdown_viewer/
+    - https://textual.textualize.io/api/app/
+  gemini-cli:
+    - https://github.com/google-gemini/gemini-cli

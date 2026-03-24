@@ -23,6 +23,7 @@
 - 전체 앱의 기준 제어면
 - 공통 명령 구조, 공통 capability, 공통 profile을 정의
 - 새 기능이 들어와도 이 계층에 투영되어야 한다
+- 사용자는 이 전역 CLI를 `batcli` executable로 실행한다
 - 권위 있는 interactive host는 Textual 기반으로 구성한다
 
 ### 2. Project CLI Context
@@ -30,6 +31,7 @@
 - 글로벌 CLI에서 파생된 프로젝트 전용 컨텍스트
 - 프로젝트별 working directory, env, attachment, auth, channel, runtime 차이를 반영
 - 사용자는 프로젝트마다 자신의 CLI 동작 방식을 세팅할 수 있다
+- 기본 원칙은 별도 top-level 실행 파일을 늘리는 것이 아니라 `batcli` 아래의 project scope로 파생하는 것이다
 
 ### 3. GUI
 

@@ -62,6 +62,13 @@ product:
     north_star: >
       A CLI-first automation workbench where global CLI, project CLI, GUI, and
       AI all control the same project system through one shared contract layer.
+  global_cli:
+    executable_name: batcli
+    executable_policy:
+      - the authoritative executable namespace for the Global CLI is batcli
+      - workflow commands and future product control commands share the batcli entrypoint
+      - project cli contexts derive from batcli scope and profile resolution by default
+      - install, dev, build, typecheck, and verify entrypoints must be callable from batcli
     primary_value:
       - let users configure custom cli workflows per project on top of a global cli base
       - let ai control every stable app capability through the same cli and action system
@@ -134,6 +141,8 @@ design_constraints:
     - every project must resolve from a global cli base
     - cli inheritance and overrides must be yaml-declared and deterministic
     - secrets are referenced, not embedded
+    - the authoritative global cli executable is batcli
+    - install, dev, build, typecheck, and verify paths must route through batcli rather than bypassing it as the primary operator contract
     - the authoritative interactive global cli host uses Textual
     - reusable upstream cli libraries may be staged under ref/ as analysis references, but product behavior must be reimplemented in owned code rather than linked directly
     - multiline paste, link paste, and image-oriented attachment ingestion are first-class global cli usability requirements

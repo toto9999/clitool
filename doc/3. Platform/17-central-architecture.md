@@ -104,34 +104,52 @@
 
 ## 현재 코드베이스 스냅샷
 
-현재 루트는 아직 `Electron Host`가 구현되지 않은 `Vite + React` 최소 렌더러 부트스트랩 상태다.
+현재 루트는 `Electron Main + Preload + Vite React Renderer + local runtime action skeleton` 이 구현된 상태다.
 
-- 현재 실제 실행 구조: `Vite SPA minimal bootstrap`
+- 현재 실제 실행 구조: `Electron desktop shell skeleton + Vite renderer`
 - 목표 실행 구조: `Electron Main + Preload + React Renderer`
-- 현재 코드의 핵심 목적: 문서 강제 시스템 유지와 깨끗한 새 출발용 렌더러 진입점 확보
+- 현재 코드의 핵심 목적: 문서 강제 시스템 유지, `batcli` 중심 개발 진입점 확보, Electron host 최소 골격과 첫 runtime action 경로 확보
 
 ## 현재 실제 코드 트리
 
 ```text
 clibase/                                  # 현재 프로젝트 루트
   bin/                                    # 로컬 CLI와 문서 workflow 도구
-    batcli.js                             # workflow/docs validate/touch를 수행하는 CLI 엔트리
+    batcli.js                             # workflow와 install/dev/build/typecheck/verify를 수행하는 Global CLI 엔트리
+  batcli.cmd                              # Windows repo-root bootstrap wrapper
+  batcli.ps1                              # PowerShell repo-root bootstrap wrapper
   doc/                                    # 중앙화된 제품/아키텍처/계약 문서
     0. Governance/                        # SSOT, DDD, workflow 강제 규칙
     1. Strategy/                          # 제품 방향, 운영 모델, 로드맵
     2. Product/                           # IA, 사용자 시나리오, 레퍼런스 해석
     3. Platform/                          # 런타임/저장/통신/보안/라우팅 계약
     9. Worklog/                           # 세션 작업 로그
+  electron/                               # 데스크톱 셸 진입 코드
+    host-services/                        # host-owned runtime service skeleton
+      browser/                            # embedded browser surface와 초기 automation backend
+        browser-surface.cts               # WebContentsView child surface, navigate/get-state/click 구현
+      runtime-control/                    # local runtime action transport and host log skeleton
+        runtime-control-server.cts        # batcli action run 요청을 받아 host action으로 실행
+        runtime-logging.cts               # bounded in-memory runtime log와 readable log key 생성
+    main/                                 # Electron main process
+      main.cts                            # BrowserWindow 생성과 dev/prod renderer 로드
+    preload/                              # 안전한 renderer bridge
+      preload.cts                         # 최소 clibaseDesktop bridge 노출
+  shared/                                 # cli와 runtime host가 함께 쓰는 로컬 계약
+    runtime-control.cjs                   # local named pipe/socket endpoint 계산
+  scripts/                                # 실행 bootstrap 보조 스크립트
+    launch-electron-dev.cjs               # Codex/Windows 환경에서 Electron Node 모드 shadowing을 제거하고 desktop shell 실행
   src/                                    # 현재 실제 최소 렌더러 부트스트랩 코드
     main.tsx                              # React 렌더러 진입점
-    vite-env.d.ts                         # Vite 타입 선언
+    vite-env.d.ts                         # Vite와 preload bridge 타입 선언
     app/                                  # 앱 루트 코드
-      App.tsx                             # 최소 재시작 화면과 새 빌드 방향 안내
+      App.tsx                             # Electron bridge 연결 상태를 보여 주는 최소 화면
     styles/                               # 최소 전역 스타일
-      index.css                           # 스타일 엔트리
+      index.css                           # skeleton 상태 화면 스타일
   ref/                                    # 비교 기준과 업스트림 CLI 레퍼런스 보관소
     basic_reference/                      # 현재 UI 재구성의 기준 레퍼런스
   package.json                            # npm 스크립트와 의존성 정의
+  tsconfig.electron.json                  # Electron main/preload compile 경계
   vite.config.ts                          # Vite 설정
   tsconfig.json                           # TypeScript 설정
   README.md                               # 루트 프로젝트 안내
@@ -145,11 +163,45 @@ clibase/                                  # 현재 프로젝트 루트
 
 - `package.json`
   - 현재 실행 스크립트와 `batcli` bin 등록
-  - 아직 Electron 스크립트는 없음
+  - `dev/build/typecheck/verify`가 `batcli`를 통해 들어오도록 고정
+  - Electron compile과 renderer build 스크립트 포함
 - `bin/batcli.js`
-  - 현재 문서 강제 시스템의 실제 실행 코드
+  - 현재 `batcli` executable의 구현
+  - 현재는 workflow/docs 기능, install/dev/build/typecheck/verify, action run 진입점이 들어간 상태
+  - 장기적으로 Global CLI product command entrypoint로 확장될 대상
+  - install
+  - dev
+  - build
+  - typecheck
+  - verify
+  - action run
   - workflow start/to-doc/to-code/status/stop
   - docs validate/touch
+- `batcli.cmd`, `batcli.ps1`
+  - 초기 clone에서 repo 루트에서 batcli bootstrap을 가능하게 하는 wrapper
+  - `batcli install` 이후 global link가 잡히면 plain `batcli` 사용을 기준으로 함
+- `shared/runtime-control.cjs`
+  - batcli와 electron host가 같은 local control endpoint를 계산
+- `electron/host-services/browser/browser-surface.cts`
+  - main window 안의 `WebContentsView` child surface 생성
+  - `browser.get-state`, `browser.navigate`, `browser.automation.click`의 첫 backend 제공
+- `electron/host-services/runtime-control/runtime-control-server.cts`
+  - local named pipe/socket server를 열어 batcli action run을 수신
+  - app.ping, app.logs.tail, browser.get-state, browser.navigate, browser.automation.click, browser.capture-screenshot를 host action으로 실행
+- `electron/host-services/runtime-control/runtime-logging.cts`
+  - host runtime log를 메모리에 유지
+  - app.logs.tail 응답의 데이터 원본 역할
+- `electron/main/main.cts`
+  - Electron BrowserWindow 생성
+  - dev server 또는 built renderer 로드
+  - preload 연결과 최소 IPC handler 등록
+  - local runtime control server와 embedded browser surface bootstrapping
+- `electron/preload/preload.cts`
+  - `clibaseDesktop` bridge 노출
+  - renderer가 main process ping 상태를 조회할 수 있게 함
+- `scripts/launch-electron-dev.cjs`
+  - `ELECTRON_RUN_AS_NODE`가 잡힌 환경에서도 Electron binary를 앱 모드로 실행
+  - `batcli dev` 경로의 Electron launch를 안정화
 - `src/main.tsx`
   - React 렌더러 진입점
   - `App` 마운트
@@ -157,8 +209,8 @@ clibase/                                  # 현재 프로젝트 루트
 ### 앱 루트
 
 - `src/app/App.tsx`
-  - 현재는 의도적으로 비워 둔 최소 시작 화면
-  - 이전 mock 라우트와 프로토타입 화면을 제거한 뒤 새 빌드 방향만 안내
+  - Electron preload bridge 연결 상태 표시
+  - renderer-only preview와 desktop shell connected 상태를 구분
 
 ### 스타일
 
@@ -170,13 +222,19 @@ clibase/                                  # 현재 프로젝트 루트
 ### 현재 실제 구현
 
 - 문서 우선 workflow 강제
-- Vite + React 최소 bootstrap
-- 새 구현 전용 빈 시작 화면
+- batcli 중심 install/dev/build/typecheck/verify 진입점
+- batcli action run skeleton
+- Electron main/preload skeleton
+- embedded `WebContentsView` browser surface
+- browser.get-state / browser.navigate / browser.automation.click
+- local runtime control server
+- bounded in-memory host runtime log
+- Vite + React renderer skeleton
+- preload ping bridge 상태 화면
 - 이전 mock 라우트와 프로토타입 UI 제거
 
 ### 아직 미구현
 
-- Electron Main/Preload
 - Runtime Host
 - 실제 Project persistence loader/writer
 - Control Plane dispatcher
@@ -184,13 +242,14 @@ clibase/                                  # 현재 프로젝트 루트
 - TextualCLIHost
 - Project management/editor/workspace renderer
 - Terminal PTY
-- WebContentsView browser
+- 다중 WebContentsView browser module 관리
 - External runtime runner
 - Skill/MCP bridge
 
 ### 해석 규칙
 
 - `src/`는 현재 UI prototype tree
+- `electron/`은 현재 desktop shell skeleton tree
 - `doc/3. Platform/*`은 목표 시스템 contract tree
 - 새 세션의 AI는 현재 코드와 목표 계약을 동시에 봐야 한다
 
@@ -201,19 +260,41 @@ clibase/                                  # 현재 프로젝트 루트
 1. `doc/3. Platform/17-central-architecture.md`
 2. `package.json`
 3. `bin/batcli.js`
-4. `src/main.tsx`
-5. `src/app/App.tsx`
-6. `src/styles/index.css`
-7. 그 다음 필요한 세부 계약 문서
+4. `shared/runtime-control.cjs`
+5. `electron/host-services/browser/browser-surface.cts`
+6. `electron/host-services/runtime-control/runtime-control-server.cts`
+7. `electron/host-services/runtime-control/runtime-logging.cts`
+8. `electron/main/main.cts`
+9. `electron/preload/preload.cts`
+10. `scripts/launch-electron-dev.cjs`
+11. `src/main.tsx`
+12. `src/app/App.tsx`
+13. `src/styles/index.css`
+14. 그 다음 필요한 세부 계약 문서
 
 ## 현재 코드 플로우
 
 ### 현재 실제 UI 부트 플로우
 
 ```text
-browser -> src/main.tsx
-  -> App.tsx
-    -> minimal rebuild placeholder
+desktop shell
+  -> electron/main/main.cts
+    -> browser-surface child view
+    -> preload bridge
+      -> src/main.tsx
+        -> App.tsx
+          -> electron status skeleton
+```
+
+### 현재 실제 runtime action 플로우
+
+```text
+batcli action run
+  -> shared/runtime-control.cjs
+    -> local named pipe or socket
+      -> runtime-control-server
+        -> host action executor
+          -> app.ping / app.logs.tail / browser.get-state / browser.navigate / browser.automation.click / browser.capture-screenshot
 ```
 
 ### 현재 실제 문서 workflow 플로우
@@ -295,14 +376,17 @@ terminal command or gui action or ai action
 ### 1. 실제 코드와 목표 계약을 구분한다
 
 - `src/`는 현재 구현
+- `electron/`은 현재 desktop shell 구현
 - `doc/3. Platform/*`은 목표 계약
 
 ### 2. 현재 없는 것을 있다고 가정하지 않는다
 
-- Electron host는 아직 코드에 없다
-- PTY/browser/module bus도 아직 없다
+- Electron host 최소 skeleton은 코드에 있다
+- PTY/module bus도 아직 없다
+- browser surface는 있으나 다중 browser module 관리, durable browser session persistence, full CDP bridge는 아직 없다
 - 현재 renderer에는 실제 workspace UI가 없다
 - Textual 기반 Global CLI host는 아직 코드에 없다
+- runtime action subset은 있으나 full control plane, durable yaml log, module bus는 아직 없다
 
 ### 3. 새 기능을 넣을 때 먼저 확인할 것
 
@@ -328,6 +412,9 @@ terminal command or gui action or ai action
 - 전체 제품의 기준 제어면
 - 모든 안정된 기능은 여기에 투영 가능해야 한다
 - 프로젝트별 CLI 파생의 기준이 된다
+- 공식 실행 namespace는 `batcli`다
+- 현재 코드 기준으로 install/dev/build/typecheck/verify도 이 진입점을 통한다
+- 현재 코드 기준으로 첫 host action subset도 이 진입점을 통한다
 
 ### Project
 
@@ -383,7 +470,8 @@ terminal command or gui action or ai action
 ### Global CLI UX
 
 - Authoritative interactive Global CLI host: Textual
-- Current renderer `GlobalCLIPanel` is a temporary prototype and debug-oriented surface
+- Authoritative executable namespace: `batcli`
+- Current renderer has no separate CLI panel; `src/app/App.tsx` only shows desktop skeleton status
 - Key UX requirements:
   - multiline compose
   - safe large paste

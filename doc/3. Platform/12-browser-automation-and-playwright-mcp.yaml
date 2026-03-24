@@ -133,6 +133,9 @@ target_resolution_contract:
 
 browser_automation_actions:
   stable_action_names:
+    - browser.get-state
+    - browser.navigate
+    - browser.capture-screenshot
     - browser.automation.navigate
     - browser.automation.click
     - browser.automation.fill
@@ -143,6 +146,8 @@ browser_automation_actions:
     - browser.automation.capture-screenshot
     - browser.automation.evaluate-readonly
   routing_rules:
+    - browser.get-state and browser.navigate are valid host-owned embedded browser actions before full same-surface automation is implemented
+    - browser.capture-screenshot is allowed as an initial host action before full same-surface automation is implemented
     - gui and cli should prefer these stable action names for visible browser automation
     - mcp tools may map to these actions through mcp.tool.call, but the underlying audit root remains the browser automation action
     - browser.navigate remains the simpler navigation contract and is not automatically upgraded to a full automation session
@@ -168,8 +173,19 @@ playwright_mcp_integration:
         - if CDP or debugger bridging is used, it must remain host-mediated and policy-scoped
         - bridge health and compatibility must be observable
   implementation_bias:
-    phase_1: support read-only-inspection and host-owned same-surface automation proof-of-concept first
+    phase_1: support read-only-inspection, browser.navigate, and host-owned same-surface click proof-of-concept first
     phase_2: promote embedded_target_mode only after the host automation bridge is validated on real project flows
+
+initial_click_backend:
+  status: allowed-for-skeleton
+  description: >
+    The first same-surface click skeleton may use a host-reviewed DOM execution
+    bridge for explicit CSS selectors while the fuller debugger or CDP bridge is
+    still unimplemented.
+  constraints:
+    - only named actions may invoke the bridge
+    - selector and result summary must still be logged
+    - this backend is an implementation step, not the final automation architecture
 
 host_automation_bridge:
   responsibilities:

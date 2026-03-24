@@ -3,15 +3,28 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "main": "./dist-electron/main/main.cjs",
   "bin": {
     "batcli": "./bin/batcli.js"
   },
   "scripts": {
     "batcli": "node ./bin/batcli.js",
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "dev": "node ./bin/batcli.js dev",
+    "app:dev": "concurrently -k -s first \"npm:dev:renderer\" \"npm:dev:electron:compile\" \"npm:dev:electron:run\"",
+    "dev:renderer": "vite",
+    "dev:electron:compile": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
+    "dev:electron:run": "wait-on tcp:5173 file:dist-electron/main/main.cjs file:dist-electron/preload/preload.cjs && node ./scripts/launch-electron-dev.cjs",
+    "build": "node ./bin/batcli.js build",
+    "app:build": "npm run build:renderer && npm run build:electron",
+    "build:renderer": "vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "preview": "node ./bin/batcli.js preview",
+    "app:preview": "vite preview",
+    "typecheck": "node ./bin/batcli.js typecheck",
+    "app:typecheck": "npm run typecheck:renderer && npm run typecheck:electron",
+    "typecheck:renderer": "tsc --noEmit",
+    "typecheck:electron": "tsc --noEmit -p tsconfig.electron.json",
+    "verify": "node ./bin/batcli.js verify",
     "docs:validate": "node ./bin/batcli.js docs validate",
     "workflow:status": "node ./bin/batcli.js workflow status"
   },
@@ -37,6 +50,9 @@
     "tailwindcss": "4.1.12",
     "tw-animate-css": "1.3.8",
     "typescript": "^5.9.3",
-    "vite": "6.3.5"
+    "vite": "6.3.5",
+    "concurrently": "9.2.1",
+    "electron": "41.0.3",
+    "wait-on": "9.0.4"
   }
 }

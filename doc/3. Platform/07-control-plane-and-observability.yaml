@@ -44,6 +44,7 @@ control_plane_model:
       - route actions to host services, module adapters, skills, or mcp bridges
       - emit ack, result, and derived event records
       - persist action, event, and audit logs
+      - accept the initial local batcli runtime action transport
   executors:
     - host-service
     - module-adapter
@@ -258,6 +259,7 @@ action_contract:
 
 control_plane_routing:
   request_flow:
+    - batcli action run may enter through the local runtime action transport during the initial skeleton phase
     - controller submits action to runtime-host-control-plane
     - policy-engine resolves scope, permissions, and attachment visibility
     - context resolver calculates effective cli, project policy, and target references
@@ -269,12 +271,14 @@ control_plane_routing:
     - global-cli -> filesystem mutation without control-plane action
     - skill -> project yaml direct write without host-managed save action
     - mcp -> module direct invocation without runtime-host mediation
+    - batcli shell shortcut directly mutates BrowserWindow or webContents without a named action
   rules:
     - the control plane owns action dispatch even for local-only gui actions
     - module bus commands are execution-level contracts beneath the control plane
     - a control action may project into one or more module-bus commands, but the top-level action remains the audit root
     - ai planners must use 09-ai-usable-module-manifest.yaml and binding policies before auto-composing actions
     - browser automation requested from terminal cli or mcp must still enter through named control actions defined in 12-browser-automation-and-playwright-mcp.yaml
+    - the initial runtime action transport may be local-only, but it must still produce the same named action records and results
 
 controller_projection_policy:
   gui_projection:
@@ -285,6 +289,7 @@ controller_projection_policy:
     rules:
       - every stable action must be invokable from global cli with explicit scope arguments
       - cli help must be generated from the same action catalog, not hand-maintained duplicates
+      - the first runtime-host actions exposed from batcli are app.ping, app.logs.tail, browser.get-state, browser.navigate, browser.automation.click, and browser.capture-screenshot
   project_cli_projection:
     rules:
       - project cli invokes the same action catalog with implicit project defaults
@@ -337,6 +342,7 @@ observability_model:
     - policy decisions, config mutations, replay runs, and security-relevant outcomes must appear in audit-log
     - log omission for stable actions is treated as a contract violation
     - event normalization for silent or text-only packages must follow 08-external-module-runtime.yaml
+    - before durable yaml buckets are implemented, the initial runtime-host skeleton may keep a bounded in-memory log, but the action names and response shapes must already match the control-plane vocabulary
 
 action_log_contract:
   record_types:

@@ -50,3 +50,7 @@
 - 2026-03-24 10:14:10 | documented performance optimization policy for state references caches and backpressure
 - 2026-03-24 10:19:20 | reset src to minimal renderer bootstrap and removed old mock workspace ui
 - 2026-03-24 10:26:36 | added missing ops docs for secrets permissions packaging release gates and source trust
+- 2026-03-24 11:02:26 | fixed authoritative global cli executable namespace as batcli
+- 2026-03-24 11:30:53 | implemented electron desktop skeleton and fixed batcli bootstrap/dev flow
+- 2026-03-24 11:51:24 | implemented batcli action run skeleton with app ping logs tail and screenshot control
+- 2026-03-24 12:15:50 | implemented embedded browser get-state navigate click and screenshot actions via batcli runtime control

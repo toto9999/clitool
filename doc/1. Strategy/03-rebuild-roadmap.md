@@ -16,9 +16,22 @@
 
 ## Phase 2. Desktop Shell Foundation
 
+- 상태: 진행중
 - Electron 메인/프리로드/렌더러 구조 생성
 - 안전한 IPC 브리지와 custom protocol 구성
 - 메인 윈도우와 view-slot 레이아웃 관리자 구성
+- 1차 스켈레톤 산출물:
+  - `electron/main/main.cts`
+  - `electron/preload/preload.cts`
+  - `tsconfig.electron.json`
+  - `package.json`의 Electron dev/build/typecheck 스크립트
+  - `scripts/launch-electron-dev.cjs`
+  - 렌더러에서 preload bridge 연결 상태를 확인하는 최소 화면
+- 1차 성공 기준:
+  - `npm run dev`로 Vite renderer와 Electron desktop shell이 함께 뜬다
+  - preload `ping` IPC가 렌더러에서 호출된다
+  - `npm run build`가 renderer와 electron entry를 함께 산출한다
+  - `npm run typecheck`가 renderer와 electron 코드를 함께 검사한다
 
 ## Phase 3. Terminal Foundation
 
@@ -34,6 +47,7 @@
 
 ## Phase 5. Control Plane, Module Bus And Observability
 
+- 상태: 진행중
 - GUI, Global CLI, Project CLI, Skill, MCP가 공유하는 상위 control plane 설계
 - 브라우저/터미널/앱 상태 간 메시지 버스 설계
 - 이벤트/명령 스키마 정의
@@ -57,6 +71,22 @@
 - `23-verification-and-release-gates.yaml` 기준으로 poc gate와 release gate 기준 확정
 - `24-trust-and-package-source-policy.yaml` 기준으로 package/binary/skill/mcp/ref source trust 전략 확정
 - `17-central-architecture.md` 기준으로 전체 아키텍처 중앙 문서와 상세 계약 문서의 관계를 고정
+- 1차 runtime action skeleton 산출물:
+  - `batcli action run`
+  - local runtime-host control transport
+  - `app.ping`
+  - `app.logs.tail`
+  - `browser.capture-screenshot`
+  - `browser.get-state`
+  - `browser.navigate`
+  - `browser.automation.click`
+- 1차 성공 기준:
+  - 실행 중인 Electron app에 `batcli action run --action app.ping` 이 응답한다
+  - `batcli action run --action app.logs.tail` 이 host runtime log를 반환한다
+  - `batcli action run --action browser.capture-screenshot` 이 현재 window 이미지를 파일로 저장한다
+  - `batcli action run --action browser.get-state` 가 현재 embedded browser surface 상태를 반환한다
+  - `batcli action run --action browser.navigate --url <url>` 이 embedded browser surface를 실제로 이동시킨다
+  - `batcli action run --action browser.automation.click --selector <css>` 가 초기 click automation을 수행한다
 
 ## Phase 6. Domain Skeleton
 
@@ -123,4 +153,5 @@
 18. `04-runtime-platform-plan.md` 기준으로 Electron 채택과 프로세스 구조를 확정하기
 19. `ssot.yaml`, `ddd.md`, `workflow-rules.md`에 제품 중심 용어를 고정하기
 20. Electron 메인/프리로드/렌더러 최소 골격을 만들기
-21. 터미널 PTY 서비스와 브라우저 surface의 최소 PoC를 따로 검증하기
+21. 중앙 아키텍처 문서에 실제 코드 트리와 Electron skeleton 책임을 반영하기
+22. 터미널 PTY 서비스와 브라우저 surface의 최소 PoC를 따로 검증하기

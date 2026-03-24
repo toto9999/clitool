@@ -83,6 +83,8 @@
   - URL 로드/탐색 제어
   - 탭별 session 분리
   - popup/navigation/permission 제어
+  - 초기 skeleton 단계에서는 main window 안의 고정 child `WebContentsView` 하나를 host-owned browser surface로 유지
+  - 초기 browser action subset은 `browser.get-state`, `browser.navigate`, `browser.automation.click`, `browser.capture-screenshot`
 
 ### 5. Module Bus
 
@@ -99,6 +101,7 @@
   - GUI, Global CLI, Project CLI, Skill, MCP 입력을 하나의 action catalog로 통합
   - project scope와 policy를 기준으로 실행 허용 여부 판단
   - action을 host service나 module bus command로 투영
+  - 초기 skeleton에서는 `batcli action run` 이 local runtime control transport를 통해 host action으로 들어가게 함
 
 ### 7. Observability Pipeline
 
@@ -158,6 +161,8 @@
 - module id / tab id / project id 기반 routing 설계
 - terminal output을 브라우저 입력이나 앱 상태로 넘기는 규칙 정의
 - 브라우저에서 선택한 데이터나 URL을 다른 모듈로 전달하는 규칙 정의
+- 초기 CLI-to-host control transport는 local-only named pipe 또는 local socket 우선
+- public port를 열지 않고 batcli와 runtime-host가 직접 연결되는 경로를 선호
 
 ## F. 상태/저장 기반
 
@@ -206,7 +211,20 @@
 
 - Electron 메인 윈도우에서 현재 React 앱을 띄운다.
 - preload를 통해 최소 ping IPC만 연결한다.
+- 1차 파일 경계:
+  - `electron/main/main.cts`: BrowserWindow 생성과 dev/prod 로드 경로 결정
+  - `electron/preload/preload.cts`: renderer에 최소 bridge API 노출
+  - `tsconfig.electron.json`: Electron entry compile 경계
+  - `scripts/launch-electron-dev.cjs`: Codex/Windows 환경의 `ELECTRON_RUN_AS_NODE` shadowing을 제거하고 Electron 바이너리를 실행
+  - `src/app/App.tsx`: desktop shell 연결 상태를 보여 주는 최소 renderer surface
+- 1차 스크립트 경계:
+  - `npm run dev`: renderer dev server와 electron entry compile, desktop shell 실행을 함께 수행
+  - `npm run build`: renderer build와 electron compile을 함께 수행
+  - `npm run typecheck`: renderer + electron 타입 검사를 함께 수행
 - 성공 기준: 데스크톱 셸 안에서 현재 UI가 뜬다.
+- 추가 성공 기준:
+  - preload bridge를 통해 renderer가 `desktop-shell connected` 상태를 확인한다
+  - `nodeIntegration off`, `contextIsolation on`, `sandbox on` 상태에서 skeleton이 동작한다
 
 ### Step 2. Terminal PoC
 
@@ -217,11 +235,20 @@
 
 - `WebContentsView` 기반 단일 브라우저 surface를 띄운다.
 - 성공 기준: 안전한 정책 아래 URL 로드와 탐색 이벤트를 제어할 수 있다.
+- 초기 action backend:
+  - `browser.get-state`
+  - `browser.navigate`
+  - `browser.automation.click`
+  - `browser.capture-screenshot`
 
 ### Step 4. Control Plane PoC
 
 - GUI와 CLI가 같은 action을 dispatch하는 최소 흐름을 만든다.
 - 성공 기준: 하나의 `project.save` 또는 `module.command`가 GUI와 CLI에서 모두 같은 dispatcher를 탄다.
+- 초기 bootstrap action:
+  - `app.ping`
+  - `app.logs.tail`
+  - `browser.capture-screenshot`
 
 ### Step 5. Module Bus PoC
 

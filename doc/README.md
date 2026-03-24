@@ -44,6 +44,7 @@
 
 ## 운영 원칙
 
+- Global CLI의 공식 실행 이름은 `batcli`로 고정합니다.
 - 방향이 바뀌면 `1. Strategy/00-project-charter.md`, `1. Strategy/14-product-direction.md`, `1. Strategy/16-project-operating-model.md`, `2. Product/15-core-user-scenarios.md`, `2. Product/02-product-ia.md`를 먼저 갱신합니다.
 - 구조나 용어가 바뀌면 `0. Governance/ssot.yaml`과 `0. Governance/ddd.md`를 먼저 갱신합니다.
 - 런타임 플랫폼이나 네이티브 기능 범위가 바뀌면 `3. Platform/04-runtime-platform-plan.md`를 먼저 갱신합니다.

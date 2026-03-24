@@ -58,6 +58,7 @@
 - `Project`: 사용자가 저장하고 진입할 수 있는 최상위 작업 단위
 - `AutomationWorkbench`: 글로벌 CLI, 프로젝트 CLI, GUI, AI가 같은 계약으로 프로젝트를 제어하는 작업환경
 - `GlobalCLIBase`: 모든 프로젝트 CLI가 파생되는 전역 CLI 기준
+- `BatCLI`: GlobalCLIBase를 실행하는 권위 있는 executable namespace
 - `ProjectCLIContext`: 특정 프로젝트에 맞게 파생된 effective CLI 컨텍스트
 - `CentralArchitectureDocument`: 전체 시스템의 계층, 책임, 제어 흐름, 저장 구조를 중앙화해 유지하는 마스터 문서
 - `CodebaseMap`: 현재 실제 코드 트리와 파일 책임을 중앙 문서에 유지하는 코드 구조 지도
@@ -105,6 +106,7 @@
 - 전체 아키텍처 수준의 변경은 `CentralArchitectureDocument`를 먼저 갱신하고, 이후 세부 계약 문서를 맞춘다.
 - `CentralArchitectureDocument`는 개념 요약만이 아니라 `CodebaseMap`, 현재 구현 상태, 핵심 플로우를 포함해야 한다.
 - 이 제품의 중심은 GUI가 아니라 `AutomationWorkbench`와 그 핵심 제어면인 `GlobalCLIBase`다.
+- `BatCLI`는 GlobalCLIBase의 공식 실행 이름이며, workflow와 제품 제어 명령은 이 namespace 아래에 모인다.
 - `TextualCLIHost`는 최종 Global CLI UX의 기준이며, 현재 React 패널은 임시 프로토타입이다.
 - `ProjectManagement`는 편집 화면이지 런타임 화면이 아니다.
 - 전역 사이드바는 프로젝트 전환용이며, 프로젝트 탭 사이드바는 탭 전환용이다.

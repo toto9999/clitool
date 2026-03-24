@@ -69,6 +69,39 @@ select {
   color: #bdd0ea;
 }
 
+.reset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.reset-grid--compact {
+  margin-top: 12px;
+}
+
+.reset-metric {
+  margin: 0;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(157, 184, 223, 0.16);
+  background: rgba(15, 29, 48, 0.72);
+}
+
+.reset-metric dt {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #88a8d8;
+}
+
+.reset-metric dd {
+  margin: 8px 0 0;
+  color: #f3f7fc;
+  font-size: 15px;
+}
+
 .reset-list {
   margin: 24px 0 0;
   padding-left: 20px;
@@ -81,4 +114,18 @@ select {
 
 a {
   color: inherit;
+}
+
+@media (max-width: 720px) {
+  .reset-shell {
+    padding: 20px;
+  }
+
+  .reset-card {
+    padding: 24px;
+  }
+
+  .reset-grid {
+    grid-template-columns: 1fr;
+  }
 }

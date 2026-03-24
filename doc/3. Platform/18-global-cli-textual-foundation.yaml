@@ -24,6 +24,7 @@ decision-summary:
   - convenience input must still go through the shared control plane and remain observable to GUI and AI
 
 global-cli-position:
+  executable_name: batcli
   role: >
     The Global CLI is the primary operator-facing control surface for the
     product. Project CLI contexts derive from it, and GUI or AI surfaces must
@@ -34,7 +35,12 @@ global-cli-position:
     3: gui configuration, observation, and debugging surfaces
     4: ai action projection over the same contracts
   authority-rules:
+    - the authoritative executable name for the Global CLI is batcli
+    - future product control commands should extend batcli rather than invent a parallel top-level executable
+    - project cli contexts should derive from batcli scope and profile resolution by default
     - stable features are incomplete until they can be driven from the Global CLI or a derived Project CLI
+    - install, dev, build, typecheck, and verify operations should expose batcli entrypoints as their primary operator contract
+    - first-time local bootstrap may use a repo-root wrapper, but the resulting steady-state command remains plain batcli
     - gui shortcuts must not create hidden command paths that bypass cli contracts
     - ai automation must use the same named actions and cli semantics rather than privileged side channels
 
@@ -164,10 +170,14 @@ control-plane-integration:
     - textual widgets do not talk directly to browser or terminal modules without a control-plane contract
 
 current-state:
-  current-authoritative-host: none
-  current-prototype-surface: src/app/components/panels/GlobalCLIPanel.tsx
+  current-authoritative-host: batcli executable with workflow/docs, build-runtime, and first runtime-action subset implemented
+  current-prototype-surface: src/app/App.tsx status-only renderer placeholder
   assessment:
-    - renderer-side mock categories and canned output only
+    - batcli already exists as the executable namespace
+    - install, dev, build, typecheck, and verify now route through batcli first
+    - action run can already reach the running electron host for app.ping, app.logs.tail, browser.get-state, browser.navigate, browser.automation.click, and browser.capture-screenshot
+    - repo-root bootstrap wrappers can seed the initial local install before global link is established
+    - renderer-side CLI surface is intentionally absent and replaced by a status-only placeholder
     - no real project cli derivation
     - no attachment ingestion pipeline
     - no formal ref library analysis and reimplementation workflow yet

@@ -1,0 +1,80 @@
+tab_key: tab-review-02
+tab_name: Review
+cli_profile_key: cli-global-default
+cli_overrides:
+  startup_directory: C:/MIDAS/code/clibase
+communication_policy:
+  default_message_scope: tab-local-only
+  cross_tab_policy: deny
+navigation_policy:
+  show_next_button: true
+  next_target_mode: hidden
+window_policy:
+  primary_surface: tab-strip
+  detachable: true
+  default_window_mode: docked-main-window
+layout:
+  layout_key: layout-review-02
+  layout_type: two-column
+  slots:
+    - slot_key: slot-browser-02
+      title: Review Browser
+      bounds:
+        x: 0
+        y: 0
+        w: 8
+        h: 12
+    - slot_key: slot-terminal-02
+      title: Review Terminal
+      bounds:
+        x: 8
+        y: 0
+        w: 4
+        h: 12
+modules:
+  - module_key: mod-browser-review-02
+    module_type: browser
+    catalog_module_key: catalog-browser-standard
+    slot_key: slot-browser-02
+    module_name: Review Browser
+    cli_profile_key: null
+    cli_overrides: null
+    settings:
+      browser_key: browser-surface-review-02
+      home_url: seed://clibase-review-browser
+      session_key: sess-browser-review-02
+    channel_refs:
+      inbound:
+        - browser.get-state
+        - browser.navigate
+        - browser.automation.click
+        - browser.capture-screenshot
+      outbound:
+        - browser.page.loaded
+        - browser.title.updated
+  - module_key: mod-terminal-review-02
+    module_type: terminal
+    catalog_module_key: catalog-terminal-standard
+    slot_key: slot-terminal-02
+    module_name: Review Shell
+    cli_profile_key: cli-global-default
+    cli_overrides: null
+    settings:
+      terminal_key: term-shell-review-02
+      shell_profile_key: shell-pwsh-default
+      startup_path: C:/MIDAS/code/clibase
+      session_key: sess-terminal-review-02
+      default_cols: 100
+      default_rows: 32
+      startup_commands: []
+    channel_refs:
+      inbound:
+        - terminal.create
+        - terminal.write
+        - terminal.resize
+        - terminal.kill
+        - terminal.logs.tail
+      outbound:
+        - terminal.output.chunk
+        - terminal.session.exited
+bindings: []

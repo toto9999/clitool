@@ -13,7 +13,7 @@
     "app:dev": "concurrently -k -s first \"npm:dev:renderer\" \"npm:dev:electron:compile\" \"npm:dev:electron:run\"",
     "dev:renderer": "vite",
     "dev:electron:compile": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
-    "dev:electron:run": "wait-on tcp:5173 file:dist-electron/main/main.cjs file:dist-electron/preload/preload.cjs && node ./scripts/launch-electron-dev.cjs",
+    "dev:electron:run": "node ./scripts/run-electron-dev.cjs",
     "build": "node ./bin/batcli.js build",
     "app:build": "npm run build:renderer && npm run build:electron",
     "build:renderer": "vite build",
@@ -33,12 +33,17 @@
     "@emotion/styled": "11.14.1",
     "@mantine/core": "^8.3.18",
     "@mantine/hooks": "^8.3.18",
+    "@microsoft/signalr": "^10.0.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "lucide-react": "0.487.0",
+    "node-pty": "^1.1.0",
     "react": "18.3.1",
     "react-dnd": "16.0.1",
     "react-dnd-html5-backend": "16.0.1",
     "react-dom": "18.3.1",
     "react-router-dom": "7.13.0",
+    "ws": "^8.20.0",
     "yaml": "^2.8.2"
   },
   "devDependencies": {
@@ -46,13 +51,14 @@
     "@types/node": "^25.5.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "4.7.0",
+    "concurrently": "9.2.1",
+    "electron": "41.0.3",
     "tailwindcss": "4.1.12",
     "tw-animate-css": "1.3.8",
     "typescript": "^5.9.3",
     "vite": "6.3.5",
-    "concurrently": "9.2.1",
-    "electron": "41.0.3",
     "wait-on": "9.0.4"
   }
 }

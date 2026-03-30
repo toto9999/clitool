@@ -20,6 +20,15 @@ design_principles:
 identifier_policy:
   character_style: lowercase-kebab-case
   sequence_style: two-digit or four-digit zero-padded suffix
+  enforcement:
+    validator_command: batcli docs validate
+    validator_rules:
+      - workspace yaml values must not include uuid-like identifiers
+      - workspace-state yaml values must not include uuid-like identifiers
+      - all persisted *_key and *_ref fields must use readable short aliases with approved prefixes and length limits
+      - active_tabs/project_order/tab_order/attached_tab_keys must preserve readable project/tab key conventions
+      - browser tab settings.home_url must not persist raw data: payloads
+      - browser seed aliases must be declared in workspace/browser-seeds.yaml
   forbidden_examples:
     - 550e8400-e29b-41d4-a716-446655440000
     - 01hv6w7z0m6j3a8m0t5f3m2xq9
@@ -39,6 +48,8 @@ identifier_policy:
     layout_key: "layout-<purpose>-<nn>"
     slot_key: "slot-<area>-<nn>"
     module_key: "mod-<module-type>-<purpose>-<nn>"
+    terminal_key: "term-<purpose>-<nn>"
+    browser_key: "browser-<purpose>-<nn>"
     binding_key: "bind-<source-purpose>-to-<target-purpose>-<nn>"
     session_key: "sess-<module-type>-<purpose>-<nn>"
     action_key: "act-<scope>-<nnnn>"
@@ -90,6 +101,8 @@ storage_plan:
       purpose: stable allocation of project ingress ports and reserved ranges
     - path: workspace/module-catalog.yaml
       purpose: built-in and user-added module catalog definitions
+    - path: workspace/browser-seeds.yaml
+      purpose: readable browser seed alias registry that maps seed:// refs to generated seed pages
     - path: workspace/projects-index.yaml
       purpose: project order, summaries, and default project selection
     - path: workspace/projects/<project_key>/project.yaml
@@ -110,13 +123,13 @@ storage_plan:
       purpose: durable policy and security audit buckets
   volatile_files:
     - path: workspace-state/runtime-index.yaml
-      purpose: currently open project, active tab, and message counters
+      purpose: currently open project, active tab, active browser target, active terminal target, and message counters
     - path: workspace-state/projects/<project_key>/sessions.yaml
       purpose: restorable browser and terminal session state
     - path: workspace-state/projects/<project_key>/auth-state.yaml
       purpose: pending auth sessions, pkce verifier state, callback correlation, and expiry tracking
     - path: workspace-state/projects/<project_key>/views.yaml
-      purpose: live bounds, focus, and temporary UI state
+      purpose: live bounds, focus, detached window placement, and temporary UI state
     - path: workspace-state/projects/<project_key>/ide-state.yaml
       purpose: open editors, active panels, downloads, and workspace tool state
     - path: workspace-state/analysis/<project_key>/projection-cache.yaml
@@ -310,6 +323,9 @@ tab_schema:
     optional_fields:
       - cli_profile_key
       - cli_overrides
+      - communication_policy
+      - navigation_policy
+      - window_policy
     layout:
       required_fields:
         - layout_key
@@ -329,12 +345,70 @@ tab_schema:
       - cli_overrides
       - settings
       - channel_refs
+    browser_settings_fields:
+      required_fields:
+        - browser_key
+        - home_url
+      optional_fields:
+        - session_key
+      rules:
+        - home_url should prefer readable refs like seed://<purpose-key> when using workspace-managed seed pages
+        - raw data:text/html payload strings are allowed only as migration fallback, not preferred persisted form
+        - seed:// refs must resolve through workspace/browser-seeds.yaml
     binding_fields:
       - binding_key
       - when
       - from
       - to
       - transform_chain
+      - binding_scope
+
+tab_window_and_communication_schema:
+  communication_policy:
+    required_fields:
+      - default_message_scope
+      - cross_tab_policy
+    optional_fields:
+      - allowed_target_tab_keys
+      - allowed_binding_keys
+    default_message_scope_values:
+      - tab-local-only
+      - project-explicit
+    cross_tab_policy_values:
+      - deny
+      - allow-explicit-bindings
+  navigation_policy:
+    required_fields:
+      - show_next_button
+      - next_target_mode
+    next_target_mode_values:
+      - ordered-next-tab
+      - explicit-target-tab
+      - hidden
+  window_policy:
+    required_fields:
+      - primary_surface
+      - detachable
+      - default_window_mode
+    optional_fields:
+      - preferred_display_key
+      - reopen_mode
+    primary_surface_values:
+      - tab-strip
+    default_window_mode_values:
+      - docked-main-window
+      - detached-window
+    reopen_mode_values:
+      - restore-last-window
+      - restore-main-window
+  binding_scope_values:
+    - tab-local
+    - cross-tab-explicit
+  rules:
+    - tab communication is isolated by default
+    - cross-tab traffic requires readable target tab references and explicit policy allowance
+    - detached tabs remain project-owned and do not bypass project policy or control plane routing
+    - docked versus detached placement must never change module identity keys
 
 module_catalog_schema:
   required_fields:
@@ -578,10 +652,15 @@ message_contract:
   command_naming:
     pattern: "<domain>.<action>"
     examples:
+      - project.open
+      - project.switch
       - browser.navigate
       - browser.reload
+      - terminal.create
       - terminal.write
       - terminal.resize
+      - terminal.kill
+      - terminal.logs.tail
       - host.save-project
   event_naming:
     pattern: "<domain>.<subject>.<state>"
@@ -662,10 +741,14 @@ session_strategy:
       durable:
         - shell_profile_key
         - startup_path
+        - terminal_key
+        - startup_commands
       volatile:
         - running_state
         - terminal_size
         - last_exit_code
+        - output_ring
+        - session_pid
 
 example_files:
   projects_index_yaml:

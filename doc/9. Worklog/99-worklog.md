@@ -51,6 +51,82 @@
 - 2026-03-24 10:19:20 | reset src to minimal renderer bootstrap and removed old mock workspace ui
 - 2026-03-24 10:26:36 | added missing ops docs for secrets permissions packaging release gates and source trust
 - 2026-03-24 11:02:26 | fixed authoritative global cli executable namespace as batcli
+- 2026-03-25: documented project-aware layout, explicit cross-tab communication policy, ide-style top tab strip, detached tab windows, and multi-monitor windowing strategy.
 - 2026-03-24 11:30:53 | implemented electron desktop skeleton and fixed batcli bootstrap/dev flow
 - 2026-03-24 11:51:24 | implemented batcli action run skeleton with app ping logs tail and screenshot control
 - 2026-03-24 12:15:50 | implemented embedded browser get-state navigate click and screenshot actions via batcli runtime control
+- 2026-03-24 12:28:11 | implemented workspace yaml bootstrap runtime registry and workspace.get-state action
+- 2026-03-24 12:38:51 | implemented batcli tui textual host skeleton with shared action catalog and batcli-managed python install
+- 2026-03-24 12:48:23 | extended batcli tui with workspace quick pickers autocomplete and browser navigate click actions
+- 2026-03-24 13:07:20 | added structured runtime log panel filterable quick pickers and browser fill extract actions
+- 2026-03-24 13:22:24 | added browser history actions live runtime log polling and runtime control timeout handling
+- 2026-03-24 14:31:01 | implemented terminal runtime core, durable yaml action-event-audit logs, project switch, and batcli tui browser-terminal workflow
+- 2026-03-24 15:27:23 | added .github/copilot-instructions.md for AI session bootstrap rules; added batcli dev start/stop/wait/status for background process lifecycle; registered copilot-instructions in ssot.yaml required_documents; documented dev lifecycle in workflow-rules.md
+- 2026-03-25 07:42:52 | fixed batcli dependency-add policy, upgraded terminal runtime to node-pty PTY, and hardened fresh Electron dev startup
+- 2026-03-25 07:54:00 | added renderer xterm terminal surface, preload terminal bridge, and in-app Electron workbench shell
+- 2026-03-25 07:59:27 | synced architecture docs with current in-app xterm workbench state
+- 2026-03-25 08:59:18 | documented project-aware layout, explicit cross-tab policy, detachable tab windows, and multi-monitor strategy
+- 2026-03-25 09:13:20 | added top tab strip foundation, tab.activate/tab.next actions, and documented must-have tab ux
+- 2026-03-25 09:43:19 | fixed detached window close crash by unregistering destroyed browser surfaces and guarding workspace broadcasts
+- 2026-03-25 10:11:14 | implemented batcli layout window-state action with persisted split ratio and docking foundation updates
+- 2026-03-25 10:20:55 | replaced deprecated Electron canGoBack/canGoForward usage with navigationHistory helpers
+- 2026-03-25 10:31:56 | added batcli dev log-file support with in-process tee logging and broken-pipe guards
+- 2026-03-25 10:36:55 | hardened electron runtime logging against broken stdout pipes to prevent main-process EPIPE crashes
+- 2026-03-25 10:57:13 | implemented docking ux foundation updates with tab.previous, keyboard tab cycling, append drop slot, redock cta, and split reset
+- 2026-03-26 07:49:28 | implemented display-aware window placement persistence and nearest-display restore foundation
+- 2026-03-26 08:58:11 | added browser dock position foundation (left/right/top/bottom) with per-window layout state and host bounds sync
+- 2026-03-26 10:04:46 | implemented detached-tab edge drop targets (center/left/right/top/bottom) with dock-position application flow
+- 2026-03-26 10:15:45 | implemented nested shell-stack split foundation with per-window shell_stack_split_ratio and shared CLI/runtime update path
+- 2026-03-26 10:38:38 | stabilized runtime smoke endpoint verification with build fallback existing-endpoint probe and restricted-environment diagnostics
+- 2026-03-26 10:40:08 | refined runtime smoke restricted-environment guidance and existing-endpoint fallback message
+- 2026-03-26 10:58:14 | implemented browser lane collapse/expand with persisted layout_state browser_collapsed and added in-app live browser controls/state output
+- 2026-03-26 11:03:05 | moved browser navigate/back-forward-reload controls and browser state output to left control card to avoid right-lane surface occlusion confusion
+- 2026-03-26 11:14:56 | updated CLIBase seed browser page to draggable floating panel layout and added automatic legacy data-page upgrade to avoid covering main content
+- 2026-03-26 11:24:13 | made seed browser floating panel collapsed by default, added explicit role section, and versioned upgrade path for older seed data pages
+- 2026-03-26 11:29:25 | changed seed browser page from floating overlay to non-overlapping dock lane panel with move-left-right and collapse-expand controls and role text
+- 2026-03-26 11:35:44 | added recover browser lane action and hidden/small lane warning banner to restore Electron browser pane visibility quickly
+- 2026-03-26 11:54:34 | reserve a visible browser host slot and sync DOM bounds into Electron so the browser lane chrome stays visible
+- 2026-03-26 11:59:40 | implemented renderer slot -> Electron host-bounds sync so the native browser surface stays inside the visible browser panel instead of covering the whole lane
+- 2026-03-26 12:18:26 | replace the seed browser verification page with a non-overlapping 3-column layout so it cannot visually cover the host browser pane chrome
+- 2026-03-26 12:22:12 | implemented the seed browser page as a fixed 3-column layout and upgraded legacy seed pages to version 4 so browser content no longer visually covers the host pane chrome
+- 2026-03-26 12:27:57 | clean up the current workbench layout so the shell feels IDE-like, keeps the browser pane practical, and removes redundant explanatory chrome
+- 2026-03-26 12:33:32 | refactored the workbench into a tighter IDE-like shell, compacted the browser pane chrome, and rebuilt the seed browser page into a shorter full-height verification layout
+- 2026-03-26 12:48:21 | make the host workspace store the single source of truth for layout presets, dock allowances, and split ranges so renderer state cannot drift
+- 2026-03-26 12:59:18 | implemented host-owned canonical layout preset main_right_browser_v1 so renderer splitters, dock controls, and persisted window state now normalize through one workspace layout policy
+- 2026-03-26 13:06:01 | compacted workbench layout density, switched redock targets to policy-driven center+allowed-edges only, and lowered canonical shell stack default to 0.32
+- 2026-03-26 13:59:58 | fixed browser surface overlap by preventing transient host-bound reset to null during layout effect reruns and adding deduplicated periodic host-bounds sync
+- 2026-03-26 14:37:35 | replaced seed browser data page with minimal v6 canvas to remove panel-in-panel overlap confusion and auto-upgrade legacy v5 seeds
+- 2026-03-26 15:29:49 | reduced browser surface resize lag by adding fire-and-forget host-bounds push during draft layout updates and keeping invoke-based bounds sync as the confirmed fallback path
+- 2026-03-26 15:34:11 | hid browser WebContentsView until renderer slot bounds arrive so inner browser content no longer flashes before the outer workbench shell on startup
+- 2026-03-26 15:52:03 | smoothed resize interaction by raf-throttling split/stack draft ratio updates and pausing heavy browser/terminal polling plus invoke-based host-bounds sync during active drag
+- 2026-03-26 15:58:44 | fixed post-resize snapback by keeping split/stack draft ratios until host layout state acknowledges the final value instead of clearing draft immediately at pointer-up
+- 2026-03-26 16:11:08 | added ui engineering governance contract and wired batcli ui-documentation guard to block verify/docs/stop when guarded ui code changes are not accompanied by required document updates
+- 2026-03-26 16:57:16 | enforced readable alias mapping policy via docs validate guard (uuid-like token reject, browser tab data-url persistence reject, seed registry checks)
+- 2026-03-26 17:13:14 | expanded SSOT identifier enforcement to all workspace/workspace-state key/ref fields with short semantic alias limits, and replaced display-id style keys with display-primary/display-XX aliases
+- 2026-03-26 17:22:56 | normalized browser runtime url outputs to readable aliases (seed:// mapping and data://inline labels) to prevent percent-encoded data URL dumps in CLI/log responses
+- 2026-03-26 18:02:13 | added left-side surface tabs (workspace/terminal) and validated in-app PTY terminal run via terminal.write + terminal.logs.tail
+- 2026-03-26 18:26:55 | realigned workbench tab visuals to basic_reference baseline (13px labels, compact 8x12 padding, #228be6 active state, reduced card styling)
+- 2026-03-30 07:48:39 | terminal side-tab mode now renders terminal-only view by hiding tab strip/browser/control panels and leaving full terminal surface
+- 2026-03-30 07:53:08 | fixed terminal-only mode input by auto-focusing xterm on mount, mode switch, reconnect, and pointer interaction
+- 2026-03-30 07:56:45 | fixed terminal tab black-screen race by ensuring terminal session creation on xterm mount and periodic sync, so idle terminals auto-start and show prompt
+- 2026-03-30 08:01:47 | removed terminal-input echo noise from PTY write path, suppressed non-PTY system markers in xterm render, and added clipboard-friendly terminal copy/paste shortcuts
+- 2026-03-30 09:05:08 | fix: harden terminal surface bootstrap and repaint to avoid black non-input state
+- 2026-03-30 09:08:21 | fix: prevent terminal black screen by resilient bootstrap and unconditional fit-before-resize
+- 2026-03-30 09:14:31 | docs: lock operator contract to batcli-first and demote raw npm usage to internal implementation detail
+- 2026-03-30 09:35:35 | docs: add agent-first AGENTS map and connect harness governance to SSOT/workflow validation
+- 2026-03-30 10:01:09 | harness governance baseline + AGENT compatibility entry
+- 2026-03-30 10:32:18 | implementation: add left Verification side tab with top EXE/UIA macro controls and bottom PTY terminal, wire uia.* IPC/runtime actions, and verify uia target+macro flow with batcli
+- 2026-03-30 10:47:10 | ui: simplified Verification panel with GenNX quick-run path (run/stop + fixed target alias) and collapsed advanced adapter/target/macro controls
+- 2026-03-30 13:51:12 | uia: quick-run now reports host-window resize-lock result and auto-falls back to external_os_window when host_panel_fill is selected (host_panel_fill remains planned)
+- 2026-03-30 12:15:00 | uia: document g4-api/uia-peek record/peek transports; add target host_reference_frame + Verification aspect preview; runtime-control flat keys for batcli; fix workspace uia-macros.yaml GenNX path
+- 2026-03-30 | uia: UiaPeek SignalR recording bridge (@microsoft/signalr + ws), IPC clibase:uia:recording-*, runtime actions uia.recording.start/stop/state, Verification UI panel for recording state and event tail
+- 2026-03-30 11:55:03 | UiaPeek SignalR recording bridge, IPC, uia.recording.* actions, Verification UI
+- 2026-03-30 12:08:48 | Windows host_reference window size lock + verification frame border
+- 2026-03-30 14:46:47 | FlaUI execution spine vs UiaPeek inspector; doc 28/17/ddd/ssot
+- 2026-03-30 15:00:25 | FlaUI-class Python UIA executor (cli-host/uia-executor), docs 17/28, workspace uia-macros default flaui_python, gitignore pycache
+- 2026-03-30 15:13:33 | batcli install/uia-executor install venv; repoRoot for run_step.py; default python from .clibase venv; AGENTS
+- 2026-03-30 15:23:10 | UiaPeek CLI auto-resolve (env/PATH/where/common); uiapeek_resolution in registry; recording pretty log + append flaui/uiapeek draft steps; Python venv resolve restore
+- 2026-03-30 15:41:56 | UiaPeek HTTP auto-start: uiapeek-resolve host, uiapeek-http-launcher ping+spawn, async ensure bridge; docs 28/17; registry uiapeek_host_resolution
+- 2026-03-30 15:48:12 | UiaPeek in-app: vendor+uData preferred paths, GitHub win-x64 zip download+sha256+extract, offline flag; uiapeek-resolve preferredHostExePaths
+- 2026-03-30 15:56:35 | UiaPeek vendor via batcli uia-peek download and install; recording session to flaui macro batch; App IPC buffer; doc 28 and 17
+- 2026-03-30 16:02:48 | Default recording session merge to flaui.set_text; checkbox for type; doc 28

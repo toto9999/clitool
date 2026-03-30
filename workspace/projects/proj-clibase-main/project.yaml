@@ -1,0 +1,16 @@
+project_key: proj-clibase-main
+project_name: CLIBase Main
+icon_key: command
+default_tab_key: tab-workbench-01
+cli_profile_key: cli-global-default
+cli_overrides:
+  startup_directory: C:/MIDAS/code/clibase
+  env_overrides:
+    CLIBASE_PROJECT_KEY: proj-clibase-main
+project_policies:
+  browser_policy_key: policy-browser-standard
+  terminal_policy_key: policy-terminal-standard
+  control_plane_policy_key: policy-control-plane-standard
+tab_order:
+  - tab-review-02
+  - tab-workbench-01

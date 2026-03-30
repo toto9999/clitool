@@ -40,6 +40,7 @@ global-cli-position:
     - project cli contexts should derive from batcli scope and profile resolution by default
     - stable features are incomplete until they can be driven from the Global CLI or a derived Project CLI
     - install, dev, build, typecheck, and verify operations should expose batcli entrypoints as their primary operator contract
+    - dependency add or update operations for product development should expose batcli entrypoints instead of asking operators to call npm directly
     - first-time local bootstrap may use a repo-root wrapper, but the resulting steady-state command remains plain batcli
     - gui shortcuts must not create hidden command paths that bypass cli contracts
     - ai automation must use the same named actions and cli semantics rather than privileged side channels
@@ -58,6 +59,8 @@ textual-host:
       purpose: short command entry, quick filters, inline overrides
     - widget: RichLog
       purpose: streaming action output, event traces, rendered results
+    - widget: RichLog
+      purpose: separate structured runtime log tail surface for readable host log inspection
     - widget: MarkdownViewer
       purpose: readable markdown results, linked references, table of contents navigation
     - widget: TabbedContent
@@ -69,7 +72,10 @@ textual-host:
   required-layout:
     - compose-pane: primary multiline authoring surface
     - result-log-pane: stream output, events, and action feedback
-    - session-sidebar: project context, active profile, and action scope
+    - runtime-log-pane: parsed log entries rendered as readable structured lines rather than raw yaml dumps
+    - terminal-log-pane: readable terminal output tail for the selected terminal target
+    - runtime-log-controls: explicit manual refresh and live polling toggle for host log observation
+    - session-sidebar: project, browser, terminal context, active profile, and action scope
     - attachment-tray: pasted or selected files, images, notebook artifacts
     - status-footer: mode, policy, attachment, and submit hints
   ux-rules:
@@ -78,6 +84,7 @@ textual-host:
     - explicit submit action is required after compose review
     - project context and effective cli profile must stay visible while composing
     - attachment state must be visible before dispatch
+    - live log polling must be visibly toggled rather than hidden background behavior
 
 input-convenience:
   supported-input-kinds:
@@ -170,18 +177,37 @@ control-plane-integration:
     - textual widgets do not talk directly to browser or terminal modules without a control-plane contract
 
 current-state:
-  current-authoritative-host: batcli executable with workflow/docs, build-runtime, and first runtime-action subset implemented
-  current-prototype-surface: src/app/App.tsx status-only renderer placeholder
+  current-authoritative-host: batcli executable implemented in Node.js for workflow/docs, build-runtime, and first runtime-action subset
+  current-prototype-surface: src/app/App.tsx workbench shell with top tabs, redock overlay, persisted split shell, and in-app xterm terminal surface
   assessment:
     - batcli already exists as the executable namespace
     - install, dev, build, typecheck, and verify now route through batcli first
-    - action run can already reach the running electron host for app.ping, app.logs.tail, browser.get-state, browser.navigate, browser.automation.click, and browser.capture-screenshot
+    - batcli dev now supports a batcli-managed --log-file option so operators do not need shell-level redirection to persist long-running development logs
+    - incremental dependency authoring now has a batcli deps add command so package changes also stay under the batcli namespace
+    - action run can already reach the running electron host for app.ping, app.logs.tail, workspace.get-state, project.open, project.switch, tab.activate, tab.next, tab.detach, tab.redock, tab.reorder, layout.window-state.update, browser.get-state, browser.navigate, browser.navigate.back, browser.navigate.forward, browser.navigate.reload, browser.automation.click, browser.automation.fill, browser.automation.extract-text, browser.capture-screenshot, terminal.create, terminal.write, terminal.resize, terminal.kill, terminal.logs.tail, and terminal.get-state
+    - batcli install now provisions a local Python/Textual environment for the interactive host
+    - batcli tui now launches the first Textual interactive host under the same batcli namespace
+    - batcli tui now exposes quick actions for workspace sync, project.open, project.switch, browser state, browser.navigate, browser.navigate.back, browser.navigate.forward, browser.navigate.reload, browser.automation.click, browser.automation.fill, browser.automation.extract-text, terminal.create, terminal.write, terminal.resize, terminal.kill, terminal.logs.tail, terminal.get-state, and log tail
+    - batcli tui now hydrates project, browser, and terminal quick pickers from workspace.get-state
+    - batcli tui now renders app.logs.tail into a separate structured runtime log pane
+    - batcli tui now renders terminal.logs.tail into a dedicated terminal log pane for the selected terminal target
+    - batcli tui now supports visible live runtime log polling on top of manual tail refresh
+    - batcli tui now supports project, browser, and terminal quick picker filtering by readable search text
+    - project_key, browser_key, and terminal_key inputs now use Textual suggester-based autocomplete
+    - the current batcli implementation is still an initial Textual skeleton rather than the final power-user host
     - repo-root bootstrap wrappers can seed the initial local install before global link is established
     - renderer-side CLI surface is intentionally absent and replaced by a status-only placeholder
     - no real project cli derivation
     - no attachment ingestion pipeline
     - no formal ref library analysis and reimplementation workflow yet
-    - no textual host implementation yet
+    - no full project-scoped Textual workflow yet
+    - no attachment tray or image/link ingestion workflow yet
+  next-implementation-slice:
+    command: batcli tui
+    purpose:
+      - keep building the same authoritative batcli tui host instead of introducing a parallel interactive cli surface
+      - add attachment ingestion, project cli derivation, richer session tabs, and better operator history on top of the current project/browser/terminal workflow
+      - preserve the same action catalog while expanding power-user ergonomics rather than bypassing control-plane contracts
 
 target-state:
   required-foundation:

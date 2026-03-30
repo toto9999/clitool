@@ -98,9 +98,13 @@
 - `22-build-packaging-and-update.yaml`
 - `23-verification-and-release-gates.yaml`
 - `24-trust-and-package-source-policy.yaml`
+- `25-project-aware-layout-and-windowing.yaml`
+- `26-interaction-and-docking-foundation.yaml`
+- `27-ui-engineering-governance.yaml`
+- `28-desktop-uia-macro-verification.yaml`
 
 역할:
-- 저장/통신/실행/보안/관찰/라우팅 계약
+- 저장/통신/실행/보안/관찰/라우팅/레이아웃-상호작용 품질 계약
 
 ## 현재 코드베이스 스냅샷
 
@@ -108,16 +112,24 @@
 
 - 현재 실제 실행 구조: `Electron desktop shell skeleton + Vite renderer`
 - 목표 실행 구조: `Electron Main + Preload + React Renderer`
-- 현재 코드의 핵심 목적: 문서 강제 시스템 유지, `batcli` 중심 개발 진입점 확보, Electron host 최소 골격과 첫 runtime action 경로 확보
+- 현재 코드의 핵심 목적: 문서 강제 시스템 유지, `batcli` 중심 개발 진입점 확보, Electron host 최소 골격과 첫 runtime action 경로 확보, 그리고 terminal/runtime/project switch 핵심 제어면을 `batcli`로 끌어올리는 것
 
 ## 현재 실제 코드 트리
 
 ```text
 clibase/                                  # 현재 프로젝트 루트
+  AGENTS.md                               # 에이전트 작업용 짧은 맵(하네스/검증/문서 진입점)
   bin/                                    # 로컬 CLI와 문서 workflow 도구
-    batcli.js                             # workflow와 install/dev/build/typecheck/verify를 수행하는 Global CLI 엔트리
+    batcli.js                             # workflow와 install/dev/build/typecheck/verify를 수행하는 Global CLI 엔트리 (Windows에서 batcli install 시 .clibase/python/uia-executor venv와 선택적 vendor/uia-peek/UiaPeek.exe batcli uia-peek download까지; --no-uia-peek로 생략)
   batcli.cmd                              # Windows repo-root bootstrap wrapper
   batcli.ps1                              # PowerShell repo-root bootstrap wrapper
+  cli-host/                               # Global CLI의 interactive host 구현
+    textual/                              # Python Textual 기반 TUI host
+      app.py                              # batcli action catalog를 사용하는 첫 Textual shell과 live runtime log/quick picker surface
+      requirements.txt                    # Textual host Python dependency seed
+    uia-executor/                         # Windows UIA 매크로 스텝 실행기 (pywinauto; flaui.* 스텝)
+      run_step.py                         # stdin JSON 한 건 → PID 기준 UIA 액션
+      requirements.txt                    # pywinauto 등
   doc/                                    # 중앙화된 제품/아키텍처/계약 문서
     0. Governance/                        # SSOT, DDD, workflow 강제 규칙
     1. Strategy/                          # 제품 방향, 운영 모델, 로드맵
@@ -127,10 +139,24 @@ clibase/                                  # 현재 프로젝트 루트
   electron/                               # 데스크톱 셸 진입 코드
     host-services/                        # host-owned runtime service skeleton
       browser/                            # embedded browser surface와 초기 automation backend
-        browser-surface.cts               # WebContentsView child surface, navigate/get-state/click 구현
+        browser-surface.cts               # WebContentsView child surface, navigate/get-state/click 구현과 per-window browser dock bounds 해석
+      terminal/                           # host-owned terminal session runtime
+        terminal-service.cts              # terminal.create/write/resize/kill/logs.tail와 terminal output ring 관리
+      uia-macro/                          # external EXE verification target + UIA macro runtime
+        uia-macro-service.cts             # uia.target/uia.macro save-list-run과 YAML macro 저장소 관리
+        uiapeek-resolve.cts               # UiaPeek CLI·HTTP 호스트(UiaPeek.exe) 경로 해석
+        uiapeek-runtime-download.cts      # GitHub 릴리스에서 UiaPeek.exe를 userData로 내려받기·vendor 경로
+        uiapeek-http-launcher.cts         # 녹화 시작 전 localhost:9955 ping 실패 시 UiaPeek.exe 기동
+        uiapeek-recording-bridge.cts      # UiaPeek SignalR hub: StartRecordingSession / ReceiveRecordingEvent
+        windows-host-window-constraint.cts # Windows: PID tree + HWND lock via WM_GETMINMAXINFO subclass
+      runtime-registry/                   # project/tab/module ownership과 live surface registry
+        runtime-registry.cts              # workspace 모듈 메타데이터와 attached browser/terminal target을 연결
       runtime-control/                    # local runtime action transport and host log skeleton
         runtime-control-server.cts        # batcli action run 요청을 받아 host action으로 실행
+        durable-log-store.cts             # workspace/logs action/event/audit yaml bucket writer
         runtime-logging.cts               # bounded in-memory runtime log와 readable log key 생성
+      workspace/                          # durable workspace yaml bootstrap과 load
+        workspace-store.cts               # workspace/와 workspace-state/를 bootstrap/load하고 active project, browser, terminal, window placement 구성을 해석
     main/                                 # Electron main process
       main.cts                            # BrowserWindow 생성과 dev/prod renderer 로드
     preload/                              # 안전한 renderer bridge
@@ -138,16 +164,26 @@ clibase/                                  # 현재 프로젝트 루트
   shared/                                 # cli와 runtime host가 함께 쓰는 로컬 계약
     runtime-control.cjs                   # local named pipe/socket endpoint 계산
   scripts/                                # 실행 bootstrap 보조 스크립트
+    ensure-uiapeek.mjs                    # batcli uia-peek download: g4-api/uia-peek 릴리스 zip에서 UiaPeek.exe를 vendor/uia-peek/에 복사
+    run-electron-dev.cjs                  # renderer dev server와 fresh electron build 산출물을 기다린 뒤 desktop shell을 실행
     launch-electron-dev.cjs               # Codex/Windows 환경에서 Electron Node 모드 shadowing을 제거하고 desktop shell 실행
   src/                                    # 현재 실제 최소 렌더러 부트스트랩 코드
     main.tsx                              # React 렌더러 진입점
     vite-env.d.ts                         # Vite와 preload bridge 타입 선언
     app/                                  # 앱 루트 코드
-      App.tsx                             # Electron bridge 연결 상태를 보여 주는 최소 화면
+      App.tsx                             # IDE형 top tab strip, previous/next tab cycling, explicit redock and append drop targets, edge-based redock drop target grid, persisted split shell plus nested shell-stack split, browser dock target controls, left-side Verification tab(상단 EXE/UIA macro/UiaPeek SignalR recording + 하단 PTY terminal), browser lane, and in-app xterm terminal surface
     styles/                               # 최소 전역 스타일
-      index.css                           # skeleton 상태 화면 스타일
+      index.css                           # workbench shell, status cards, and xterm terminal surface 스타일
   ref/                                    # 비교 기준과 업스트림 CLI 레퍼런스 보관소
     basic_reference/                      # 현재 UI 재구성의 기준 레퍼런스
+  workspace/                              # 초기 durable workspace yaml 시드
+    app.yaml                              # global cli 기본값
+    cli-profiles.yaml                     # reusable cli profiles
+    browser-seeds.yaml                    # seed:// 별칭과 브라우저 seed 페이지 매핑 레지스트리
+    module-catalog.yaml                   # built-in module catalog seed
+    projects-index.yaml                   # 프로젝트 목록과 기본 진입 프로젝트
+    projects/                             # 프로젝트별 yaml 저장
+    logs/                                 # action/event/audit yaml bucket 저장소
   package.json                            # npm 스크립트와 의존성 정의
   tsconfig.electron.json                  # Electron main/preload compile 경계
   vite.config.ts                          # Vite 설정
@@ -156,6 +192,16 @@ clibase/                                  # 현재 프로젝트 루트
 ```
 
 위 트리는 현재 실제로 의미 있게 사용하는 코드 파일 기준이다. 이전 프로토타입에서 남은 빈 디렉터리가 일부 디스크에 남아 있더라도, 활성 코드 구조는 위 목록을 기준으로 본다.
+
+## 하네스 엔지니어링 준수 상태 (2026-03-30)
+
+- 녹색:
+  - 문서 우선 phase 게이트(`batcli workflow` + `docs validate`)가 실제 CLI에 연결되어 있다.
+  - `batcli` 중심 제어면과 runtime action 경로(`app/browser/terminal/workspace`)가 동작한다.
+  - smoke/runtime 확인 경로와 worklog 기록 규칙이 존재한다.
+- 황색:
+  - 시나리오 기반 E2E harness(탭/브라우저/터미널 복합 플로우)의 자동 회귀 범위는 아직 제한적이다.
+  - 에이전트 작업 진입점 문서는 이제 `AGENTS.md`를 기준으로 시작했으며, 앞으로 검증 자동화 커버리지와 함께 계속 강화해야 한다.
 
 ## 현재 코드 파일 책임 맵
 
@@ -167,10 +213,16 @@ clibase/                                  # 현재 프로젝트 루트
   - Electron compile과 renderer build 스크립트 포함
 - `bin/batcli.js`
   - 현재 `batcli` executable의 구현
-  - 현재는 workflow/docs 기능, install/dev/build/typecheck/verify, action run 진입점이 들어간 상태
+  - 현재는 workflow/docs 기능, install/dev/build/typecheck/verify, smoke runtime, action run 진입점이 들어간 상태
+  - `batcli dev --log-file ...`로 long-running dev output을 batcli-managed file sink로 남길 수 있다
+  - `batcli smoke runtime`은 제한 환경에서 `dev` 체인(vite/concurrently) 없이 dist renderer 기반 Electron을 올리고 `app.ping`으로 runtime control endpoint readiness를 확인한다
+  - `batcli smoke runtime --existing-only`는 이미 실행 중인 endpoint만 검증하는 모드다
+  - product dependency add/update도 `batcli deps add ...`로 끌어올리는 기준 진입점
   - 장기적으로 Global CLI product command entrypoint로 확장될 대상
   - install
+  - deps add
   - dev
+  - smoke runtime
   - build
   - typecheck
   - verify
@@ -180,36 +232,81 @@ clibase/                                  # 현재 프로젝트 루트
 - `batcli.cmd`, `batcli.ps1`
   - 초기 clone에서 repo 루트에서 batcli bootstrap을 가능하게 하는 wrapper
   - `batcli install` 이후 global link가 잡히면 plain `batcli` 사용을 기준으로 함
+- `cli-host/textual/app.py`
+  - `batcli tui`로 실행되는 첫 Textual interactive host
+  - action name input, multiline YAML payload compose, project/browser context input, quick action 버튼, result pane, structured runtime log pane 제공
+  - manual tail과 live polling toggle을 통한 runtime log 관찰 제공
+  - workspace 기반 project/browser quick picker와 project/browser key autocomplete 제공
+  - project/browser quick picker search and filter input 제공
+  - browser.get-state, browser.navigate, browser.navigate.back, browser.navigate.forward, browser.navigate.reload, browser.automation.click, browser.automation.fill, browser.automation.extract-text quick action 제공
+  - 내부적으로 같은 `batcli action run` action catalog를 사용
 - `shared/runtime-control.cjs`
   - batcli와 electron host가 같은 local control endpoint를 계산
+- `electron/host-services/workspace/workspace-store.cts`
+  - `workspace/`와 `workspace-state/` 루트를 해석하고 부족한 yaml을 bootstrap
+  - `workspace/browser-seeds.yaml`에서 seed:// 별칭을 읽어 브라우저 home_url을 사람이 읽기 쉬운 ref 기반으로 해석
+  - active project, active tab, browser module, terminal module 메타데이터를 load
+  - project.open/project.switch를 위한 runtime-index mutation과 snapshot reload를 담당
+  - per-window `display_key`, `bounds`, `layout_state`를 narrow mutation path로 갱신
+- `electron/host-services/runtime-registry/runtime-registry.cts`
+  - workspace에서 읽은 project/tab/module ownership과 live browser/terminal target을 연결
+  - registry-backed `browser.get-state`, `browser.navigate`, `browser.navigate.back`, `browser.navigate.forward`, `browser.navigate.reload`, `browser.automation.click`, `browser.automation.fill`, `browser.automation.extract-text`, `terminal.get-state` 해석 제공
 - `electron/host-services/browser/browser-surface.cts`
   - main window 안의 `WebContentsView` child surface 생성
-  - `browser.get-state`, `browser.navigate`, `browser.automation.click`의 첫 backend 제공
+  - registry가 지정한 `browser_key`와 initial url을 기준으로 surface 생성
+  - `browser.get-state`, `browser.navigate`, `browser.navigate.back`, `browser.navigate.forward`, `browser.navigate.reload`, `browser.automation.click`, `browser.automation.fill`, `browser.automation.extract-text`의 첫 backend 제공
+- `electron/host-services/terminal/terminal-service.cts`
+  - host-owned terminal session runtime
+  - 현재는 `node-pty` 기반 PTY 세션 backend를 사용
+  - `terminal.create`, `terminal.write`, `terminal.resize`, `terminal.kill`, `terminal.logs.tail`, `terminal.get-state`의 첫 backend 제공
+- `electron/host-services/uia-macro/uia-macro-service.cts`
+  - local EXE verification target launcher와 UIA 매크로 단계 실행 경로를 제공
+  - 제품 방향: 안정적 재실행·실행 엔진의 중심은 FlaUI 계열; UiaPeek은 Peek/Record·셀렉터 확인용 보조 도구 (`28-desktop-uia-macro-verification.yaml`의 desktop_uia_tooling_roles)
+  - `flaui.*` 스텝은 리포 루트 기준 `cli-host/uia-executor/run_step.py`(pywinauto UIA)로 실행; `uiapeek.*` 스텝은 비어 있는 `executable_path`일 때 환경·PATH·일반 설치 경로로 UiaPeek CLI를 해석해 실행. 저장된 `uia_adapter.executable_path`·`CLIBASE_UIAPEEK_EXE`가 우선. Python은 `CLIBASE_PYTHON`·`python_executable`·리포 루트 `.clibase/python/uia-executor/Scripts/python.exe`(존재 시)·`python` 순
+  - `workspace/uia-macros.yaml` 기반 target/macro 저장, 조회, 실행 결과를 관리
+  - target별 `host_reference_frame`(기준 width/height, coordinate_space, placement_mode)로 녹화·재생 좌표 정규화 틀을 저장
+  - `uia.target.*`, `uia.macro.*` 제어면의 첫 backend 제공
+- `electron/host-services/uia-macro/uiapeek-recording-bridge.cts`
+  - UiaPeek SignalR hub에 연결하고 `ReceiveRecordingEvent`를 메인 프로세스에서 버퍼링·브로드캐스트
+  - `uia.recording.start` / `uia.recording.stop` / `uia.recording.state`와 preload `startUiaRecording` 등이 동일 브리지를 사용
 - `electron/host-services/runtime-control/runtime-control-server.cts`
   - local named pipe/socket server를 열어 batcli action run을 수신
-  - app.ping, app.logs.tail, browser.get-state, browser.navigate, browser.automation.click, browser.capture-screenshot를 host action으로 실행
+  - app.ping, app.logs.tail, workspace.get-state, project.open, project.switch, browser.get-state, browser.navigate, browser.navigate.back, browser.navigate.forward, browser.navigate.reload, browser.automation.click, browser.automation.fill, browser.automation.extract-text, browser.capture-screenshot, terminal.create, terminal.write, terminal.resize, terminal.kill, terminal.logs.tail, terminal.get-state, uia.registry.get, uia.adapter.update, uia.target.save, uia.target.launch, uia.target.stop, uia.target.state, uia.macro.save, uia.macro.list, uia.macro.delete, uia.macro.run, uia.recording.start, uia.recording.stop, uia.recording.state을 host action으로 실행
+- `electron/host-services/runtime-control/durable-log-store.cts`
+  - `workspace/logs/actions`, `workspace/logs/events`, `workspace/logs/audit` 아래 append-only yaml bucket을 관리
+  - readable action/event/audit key 생성과 버킷 rotation을 담당
 - `electron/host-services/runtime-control/runtime-logging.cts`
   - host runtime log를 메모리에 유지
   - app.logs.tail 응답의 데이터 원본 역할
 - `electron/main/main.cts`
   - Electron BrowserWindow 생성
   - dev server 또는 built renderer 로드
-  - preload 연결과 최소 IPC handler 등록
-  - local runtime control server와 embedded browser surface bootstrapping
+  - preload 연결과 workspace/terminal IPC handler 등록
+  - workspace store, runtime registry, local runtime control server, embedded browser surface bootstrapping
+  - detached window placement를 same-display 우선, nearest-display fallback으로 normalize
 - `electron/preload/preload.cts`
   - `clibaseDesktop` bridge 노출
-  - renderer가 main process ping 상태를 조회할 수 있게 함
+  - renderer가 main process ping, workspace state, terminal create/write/resize/log tail, terminal stream subscription에 접근하게 함
 - `scripts/launch-electron-dev.cjs`
   - `ELECTRON_RUN_AS_NODE`가 잡힌 환경에서도 Electron binary를 앱 모드로 실행
   - `batcli dev` 경로의 Electron launch를 안정화
+- `scripts/run-electron-dev.cjs`
+  - renderer port와 fresh `dist-electron` 산출물을 함께 기다린 뒤 Electron을 띄운다
+  - stale build를 보고 예전 main/preload로 부팅되는 dev race를 막는다
 - `src/main.tsx`
   - React 렌더러 진입점
-  - `App` 마운트
+  - `App` 마운트와 xterm css 로드
 
 ### 앱 루트
 
 - `src/app/App.tsx`
   - Electron preload bridge 연결 상태 표시
+  - workspace summary와 active browser/terminal target 표시
+  - IDE형 top tab strip, detached tab redock zone, bottom next-tab flow의 첫 foundation 제공
+  - previous/next tab keyboard cycling, explicit strip append drop slot, detached-window return CTA 제공
+  - persisted shell split ratio를 따르는 workbench shell과 host browser lane을 렌더
+  - split handle double-click reset을 통해 documented default ratio 복원
+  - renderer-side in-app xterm terminal surface를 통해 PTY output과 입력을 연결
   - renderer-only preview와 desktop shell connected 상태를 구분
 
 ### 스타일
@@ -223,10 +320,44 @@ clibase/                                  # 현재 프로젝트 루트
 
 - 문서 우선 workflow 강제
 - batcli 중심 install/dev/build/typecheck/verify 진입점
+- batcli tui Textual host skeleton
+- workspace 기반 project/browser quick picker
+- workspace 기반 terminal quick picker
+- workspace 기반 project/browser search and filter picker
+- workspace 기반 terminal search and filter picker
+- project_key / browser_key / terminal_key autocomplete
+- project open/switch action
+- tab.activate / tab.next action
+- tab.previous action
+- tab.detach / tab.redock / tab.reorder action
+- keyboard-driven previous/next tab cycling
+- explicit strip append drop slot and detached-window return action
+- batcli tui navigate/click quick actions
+- batcli tui fill/extract quick actions
+- batcli tui terminal create/write/resize/kill/tail quick actions
+- batcli tui structured runtime log panel
+- batcli tui terminal output panel
+- batcli tui live runtime log polling toggle
+- browser back/forward/reload actions
+- preload terminal bridge
+- renderer-side in-app xterm terminal surface
+- workspace-aware terminal session summary inside the Electron renderer
+- renderer-side top tab strip, explicit redock overlay, and next-tab navigation foundation
+- persisted per-window shell split ratio with host browser bounds synchronization
+- batcli layout.window-state.update action
 - batcli action run skeleton
+- deterministic Vite dev port 고정
 - Electron main/preload skeleton
+- `workspace/` durable yaml seed
+- workspace bootstrap/load
+- runtime registry
 - embedded `WebContentsView` browser surface
+- workspace.get-state
+- active project tab summaries in workspace state
 - browser.get-state / browser.navigate / browser.automation.click
+- terminal.create / terminal.write / terminal.resize / terminal.kill / terminal.logs.tail / terminal.get-state
+- uia.registry.get / uia.adapter.update / uia.target.save / uia.target.launch / uia.target.stop / uia.target.state / uia.macro.save / uia.macro.list / uia.macro.delete / uia.macro.run / uia.recording.start / uia.recording.stop / uia.recording.state
+- durable yaml action/event/audit log bucket append
 - local runtime control server
 - bounded in-memory host runtime log
 - Vite + React renderer skeleton
@@ -235,14 +366,13 @@ clibase/                                  # 현재 프로젝트 루트
 
 ### 아직 미구현
 
-- Runtime Host
 - 실제 Project persistence loader/writer
 - Control Plane dispatcher
 - Module Bus
-- TextualCLIHost
 - Project management/editor/workspace renderer
-- Terminal PTY
 - 다중 WebContentsView browser module 관리
+- project-aware layout/module canvas
+- advanced detachable tab window manager and richer dock targets
 - External runtime runner
 - Skill/MCP bridge
 
@@ -260,17 +390,23 @@ clibase/                                  # 현재 프로젝트 루트
 1. `doc/3. Platform/17-central-architecture.md`
 2. `package.json`
 3. `bin/batcli.js`
-4. `shared/runtime-control.cjs`
-5. `electron/host-services/browser/browser-surface.cts`
-6. `electron/host-services/runtime-control/runtime-control-server.cts`
-7. `electron/host-services/runtime-control/runtime-logging.cts`
-8. `electron/main/main.cts`
-9. `electron/preload/preload.cts`
-10. `scripts/launch-electron-dev.cjs`
-11. `src/main.tsx`
-12. `src/app/App.tsx`
-13. `src/styles/index.css`
-14. 그 다음 필요한 세부 계약 문서
+4. `cli-host/textual/app.py`
+5. `shared/runtime-control.cjs`
+6. `electron/host-services/workspace/workspace-store.cts`
+7. `electron/host-services/runtime-registry/runtime-registry.cts`
+8. `electron/host-services/browser/browser-surface.cts`
+9. `electron/host-services/terminal/terminal-service.cts`
+10. `electron/host-services/runtime-control/durable-log-store.cts`
+11. `electron/host-services/runtime-control/runtime-control-server.cts`
+12. `electron/host-services/runtime-control/runtime-logging.cts`
+13. `electron/main/main.cts`
+14. `electron/preload/preload.cts`
+15. `scripts/run-electron-dev.cjs`
+16. `scripts/launch-electron-dev.cjs`
+17. `src/main.tsx`
+18. `src/app/App.tsx`
+19. `src/styles/index.css`
+19. 그 다음 필요한 세부 계약 문서
 
 ## 현재 코드 플로우
 
@@ -293,8 +429,9 @@ batcli action run
   -> shared/runtime-control.cjs
     -> local named pipe or socket
       -> runtime-control-server
-        -> host action executor
-          -> app.ping / app.logs.tail / browser.get-state / browser.navigate / browser.automation.click / browser.capture-screenshot
+  -> host action executor
+          -> app.ping / app.logs.tail / workspace.get-state / project.open / project.switch / tab.activate / tab.next / tab.previous / tab.detach / tab.redock / tab.reorder / layout.window-state.update / browser.get-state / browser.navigate / browser.navigate.back / browser.navigate.forward / browser.navigate.reload / browser.automation.click / browser.automation.fill / browser.automation.extract-text / browser.capture-screenshot / terminal.create / terminal.write / terminal.resize / terminal.kill / terminal.logs.tail / terminal.get-state / uia.registry.get / uia.adapter.update / uia.target.save / uia.target.launch / uia.target.stop / uia.target.state / uia.macro.save / uia.macro.list / uia.macro.delete / uia.macro.run / uia.recording.start / uia.recording.stop / uia.recording.state
+  -> durable action/event/audit yaml bucket append
 ```
 
 ### 현재 실제 문서 workflow 플로우
@@ -382,11 +519,13 @@ terminal command or gui action or ai action
 ### 2. 현재 없는 것을 있다고 가정하지 않는다
 
 - Electron host 최소 skeleton은 코드에 있다
-- PTY/module bus도 아직 없다
-- browser surface는 있으나 다중 browser module 관리, durable browser session persistence, full CDP bridge는 아직 없다
-- 현재 renderer에는 실제 workspace UI가 없다
-- Textual 기반 Global CLI host는 아직 코드에 없다
-- runtime action subset은 있으나 full control plane, durable yaml log, module bus는 아직 없다
+- module bus도 아직 없다
+- 현재 terminal runtime core는 `node-pty` 기반 PTY backend를 가지며, renderer-side in-app xterm surface도 연결돼 있다
+- workspace bootstrap/load와 runtime registry는 있으나 durable browser session persistence, full control plane dispatch, full CDP bridge는 아직 없다
+- 현재 renderer에는 초기 workbench UI와 in-app terminal surface가 있으나, 최종 project-aware workspace canvas는 아직 없다
+- initial Textual 기반 Global CLI host는 있으나 attachment ingestion, project cli derivation, session tabs, full TUI workflow는 아직 없다
+- runtime action subset은 있으나 full control plane과 module bus는 아직 없다
+- browser surface는 host-owned child view이며 current screenshot path does not yet capture that child view together with the renderer perfectly
 
 ### 3. 새 기능을 넣을 때 먼저 확인할 것
 
@@ -465,13 +604,15 @@ terminal command or gui action or ai action
 - Host: Electron
 - Renderer: React + Vite
 - Browser Surface: WebContentsView
+- Browser Surface Mount Rule: renderer declares the visible host slot and Electron mounts the `WebContentsView` into that exact slot so browser chrome does not get hidden behind the native view
 - Terminal: xterm.js + node-pty
 
 ### Global CLI UX
 
 - Authoritative interactive Global CLI host: Textual
 - Authoritative executable namespace: `batcli`
-- Current renderer has no separate CLI panel; `src/app/App.tsx` only shows desktop skeleton status
+- Current `batcli` implementation includes a Node.js bootstrap/runtime shell and an initial `batcli tui` Textual host skeleton
+- Current renderer has no separate CLI panel; `src/app/App.tsx` now shows an initial workbench shell with a top tab strip, explicit redock zone, persisted split shell, workspace summary, and an in-app xterm terminal surface
 - Key UX requirements:
   - multiline compose
   - safe large paste

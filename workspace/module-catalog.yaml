@@ -1,0 +1,40 @@
+modules:
+  - catalog_module_key: catalog-browser-standard
+    module_type: browser
+    display_name: Browser
+    runtime_class: browser-surface
+    package_key: package-builtin-browser-surface
+    ai_manifest_key: ai-browser-standard
+    settings_schema_key: schema-browser-standard
+    allowed_commands:
+      - browser.get-state
+      - browser.navigate
+      - browser.navigate.back
+      - browser.navigate.forward
+      - browser.navigate.reload
+      - browser.automation.click
+      - browser.automation.fill
+      - browser.automation.extract-text
+      - browser.capture-screenshot
+    emitted_events:
+      - browser.page.loaded
+      - browser.page.navigated
+      - browser.title.updated
+  - catalog_module_key: catalog-terminal-standard
+    module_type: terminal
+    display_name: Terminal
+    runtime_class: terminal-surface
+    package_key: package-builtin-terminal-pty
+    ai_manifest_key: ai-terminal-standard
+    settings_schema_key: schema-terminal-standard
+    allowed_commands:
+      - terminal.create
+      - terminal.get-state
+      - terminal.write
+      - terminal.resize
+      - terminal.logs.tail
+      - terminal.kill
+    emitted_events:
+      - terminal.session.created
+      - terminal.output.chunk
+      - terminal.session.exited

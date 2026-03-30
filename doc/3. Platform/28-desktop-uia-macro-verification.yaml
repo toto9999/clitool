@@ -1,0 +1,346 @@
+version: 0.1.0
+
+contract_scope:
+  purpose: >
+    Define the desktop verification lane that launches a local EXE target,
+    stores shareable macro contracts as readable YAML, and routes UIA work
+    through a clear split: FlaUI-class execution for stable macro run/replay,
+    and UiaPeek-class tooling for live inspection, selector discovery, and
+    recorder assist. Control-plane action names stay uia.* and provider-neutral.
+  status: active
+  related_documents:
+    - doc/3. Platform/07-control-plane-and-observability.yaml
+    - doc/3. Platform/05-system-contracts.yaml
+    - doc/3. Platform/10-browser-terminal-and-ide-foundation.yaml
+    - doc/3. Platform/27-ui-engineering-governance.yaml
+
+north_star:
+  statement: >
+    Verification users can run a local product EXE from the app, keep a terminal
+    lane for command-level checks, and save/reuse/share deterministic UI macros
+    through one control-plane action catalog.
+
+desktop_uia_tooling_roles:
+  summary: >
+    One engine for “do the work”, another for “see what is on screen and capture context”.
+    If a single center is chosen, FlaUI is the execution body; UiaPeek is auxiliary.
+  flaui:
+    role: execution_engine
+    intent: >
+      Perform actions: click, type, invoke patterns, stable macro replay, batch runs,
+      GUI-editable macro execution paths. This is the spine for macro save, re-run,
+      and production-like reliability.
+  uia_peek:
+    role: field_inspector_and_recorder_assist
+    intent: >
+      Explore the live UI: “this is the Run button”, chain/path, bounds, structure.
+      Peek (REST), Record (SignalR), CLI for discovery and recorder-side assist—not
+      the primary long-run execution engine.
+  ordering_rule:
+    - Prefer FlaUI-backed execution for uia.macro.run and steady automation
+    - Use UiaPeek when selectors, structure, or recording streams need confirmation early
+  implementation_note: >
+    Macro steps prefixed with flaui. are executed by the bundled Python runner
+    cli-host/uia-executor/run_step.py (pywinauto UIA backend) against the target PID.
+    Steps prefixed with uiapeek. continue to invoke the UiaPeek CLI configured in
+    uia_adapter.executable_path. The same uia.* action surface applies to both.
+    When uia.recording.start or IPC recording-start runs, the Electron main process
+    ensures UiaPeek HTTP is listening on the configured localhost hub (default port 9955)
+    by spawning UiaPeek.exe if /api/v4/g4/ping is not yet reachable; remote-only hubs
+    require the operator to start UiaPeek on that host.
+
+global_cli_uia_executor_bootstrap:
+  purpose: >
+    Operators must not hand-roll pip installs for flaui.* execution; batcli owns the
+    Windows venv under .clibase/python/uia-executor (same family as the Textual host venv).
+  windows_only: true
+  commands:
+    bundled_with_install: batcli install
+    skip_flag: batcli install --no-uia-executor
+    standalone: batcli uia-executor install
+  venv_python_relative_windows: .clibase/python/uia-executor/Scripts/python.exe
+  interpreter_resolution_order:
+    - CLIBASE_PYTHON when set
+    - uia_adapter.python_executable in workspace/uia-macros.yaml when non-empty
+    - repo-root venv path above when the file exists
+    - python on PATH
+  uiapeek_cli_resolution_order:
+    - CLIBASE_UIAPEEK_EXE when set
+    - uia_adapter.executable_path when non-empty
+    - common Windows install paths under LOCALAPPDATA and Program Files
+    - System32 where.exe uiapeek then PATH directory scan
+    - bare name uiapeek (OS PATH)
+  uiapeek_http_host_resolution_order:
+    - CLIBASE_UIAPEEK_HOST_EXE when set
+    - uia_adapter.executable_path when it points at UiaPeek.exe or uiapeek.exe (adjacent UiaPeek.exe in same folder)
+    - same-folder UiaPeek.exe next to a resolved uiapeek CLI path
+    - common Windows folders for UiaPeek.exe
+    - where UiaPeek.exe then PATH scan for UiaPeek.exe
+  uiapeek_http_autostart:
+    - on recording start, if hub URL hostname is localhost or 127.0.0.1 or ::1 and ping fails, spawn resolved UiaPeek.exe detached and poll until ping succeeds or timeout
+    - HTTP health probe targets 127.0.0.1 when the hub host is localhost so Node does not prefer IPv6 (::1) while UiaPeek listens on IPv4 only
+    - default wait before ping timeout is 90s; set CLIBASE_UIAPEEK_HTTP_WAIT_MS (5000–300000) for slower machines
+    - if hub points at a non-loopback host, do not spawn locally; fail with a clear message if unreachable
+    - on app quit, terminate only a UiaPeek process that clibase spawned for this session
+  uiapeek_in_app_provisioning:
+    - Windows host resolution prefers repo vendor/uia-peek/UiaPeek.exe then userData/uia-peek/UiaPeek.exe before PATH
+    - if still missing and not CLIBASE_UIAPEEK_OFFLINE_DOWNLOAD, Electron downloads the latest win-x64 zip from g4-api/uia-peek GitHub releases into userData, verifies sha256 when published, extracts UiaPeek.exe, then continues
+    - air-gapped installs copy UiaPeek.exe into vendor/uia-peek/ and may set CLIBASE_UIAPEEK_OFFLINE_DOWNLOAD=1 to skip download attempts
+  script_path_note: >
+    run_step.py resolves from the application repo root (not workspace/), so the host passes
+    repoRoot separately from workspace data paths.
+
+uiapeek_vendor_bootstrap:
+  purpose: >
+    Pre-populate vendor/uia-peek/UiaPeek.exe from GitHub releases so host resolution finds
+    UiaPeek before PATH or in-app userData download; network is required on first download.
+  windows_only: true
+  commands:
+    bundled_with_install: batcli install
+    skip_flag: batcli install --no-uia-peek
+    standalone: batcli uia-peek download [--force]
+  destination: vendor/uia-peek/UiaPeek.exe
+  temp_extract_root: .clibase/uia-peek-dl
+
+design_principles:
+  - external app control and macro execution must remain batcli/action driven
+  - macro contracts are yaml-first and readable-key-first
+  - no hidden GUI-only automation paths
+  - macro execution and results must be loggable and replay-addressable
+  - the top verification lane and bottom terminal lane are one workflow surface
+  - provider-specific adapter details must not leak into action naming
+
+verification_lane_model:
+  ui_surface:
+    left_side_tab_key: verification
+    top_lane:
+      purpose: local EXE target control and macro management
+      requirements:
+        - save target profile
+        - launch and stop target process
+        - show target running state
+        - list and manage macros
+        - run selected macro
+    bottom_lane:
+      purpose: in-app PTY terminal for supporting commands and diagnostics
+      requirements:
+        - same terminal session contract as existing terminal lane
+        - no separate hidden shell for verification
+  windowing_rule:
+    - external target app may run in its own native window
+    - the verification tab controls that target via host service and action contracts
+    - host_reference_frame stores the declared logical size and coordinate space for future replay alignment and optional host-panel embedding
+
+host_reference_frame_contract:
+  purpose: >
+    When UiaPeek (or future recorders) emits screen or client coordinates, normalize and replay
+    against a stable contract: the logical width/height the operator agreed to when saving the
+    target profile, plus whether coordinates are screen, client, or host_reference space.
+  placement_mode:
+    external_os_window:
+      description: >
+        Target process uses a normal top-level window; no embedding in Electron yet.
+        On Windows, when host_reference_frame is saved, the host walks the spawned PID process tree
+        (Toolhelp32), finds the largest visible top-level HWND owned by any of those PIDs, applies
+        SetWindowPos to width_px x height_px outer size, strips WS_MAXIMIZEBOX, and subclasses
+        WM_GETMINMAXINFO so min and max track sizes match (resize lock). If subclassing fails, it
+        falls back to size snap only. Borderless or custom-chrome apps may still show no OS frame.
+    host_panel_fill:
+      description: >
+        Reserved for a future HWND or overlay alignment so the target surface fills the
+        verification panel frame that matches host_reference_frame dimensions.
+  coordinate_space:
+    screen: global screen pixels (DPI awareness is a follow-up)
+    client: target window client area
+    host_reference: normalized to the stored width_px height_px box (recommended for replay)
+  ui_surface:
+    - Verification tab shows a preview frame with the same aspect ratio as width_px height_px
+    - The preview uses a solid border and explicit pixel label; it is not a live embed of the OS window
+    - Values persist in workspace uia-macros.yaml under each target
+
+uiapeek_upstream_reference:
+  repository: https://github.com/g4-api/uia-peek
+  summary: >
+    UiaPeek exposes Peek (REST), Record (SignalR), and CLI. Recording streams
+    ReceiveRecordingEvent after StartRecordingSession on hub /hub/v4/g4/peek.
+  peek_response_shape:
+    description: >
+      Peek API returns JSON with chain/path; trigger element includes bounds with
+      X, Y, width, height (see upstream README sample).
+  recording_transport:
+    - SignalR hub methods StartRecordingSession, StopRecordingSession(sessionId)
+    - server events ReceiveRecordingEvent with keyboard/mouse plus UI context
+  integration_note: >
+    clibase Electron main embeds @microsoft/signalr against the UiaPeek hub (default
+    http://localhost:9955/hub/v4/g4/peek, override CLIBASE_UIAPEEK_HUB_URL). Events are
+    forwarded to the renderer via IPC clibase:uia:recording-event; runtime actions
+    uia.recording.start / uia.recording.stop / uia.recording.state mirror the same bridge.
+
+storage_contract:
+  file_path: workspace/uia-macros.yaml
+  format: yaml
+  top_level_fields:
+    - version
+    - uia_adapter
+    - targets
+    - macros
+  readable_key_rules:
+    - target_key prefix: target-
+    - macro_key prefix: macro-
+    - step_key prefix: step-
+    - no uuid or opaque hash tokens
+  target_fields:
+    - target_key
+    - target_name
+    - exe_path
+    - args
+    - working_dir
+    - startup_wait_ms
+    - host_reference_frame
+    - created_at
+    - updated_at
+  host_reference_frame_fields:
+    - width_px
+    - height_px
+    - coordinate_space
+    - placement_mode
+  macro_fields:
+    - macro_key
+    - macro_name
+    - target_key
+    - description
+    - shared_tags
+    - steps
+    - created_at
+    - updated_at
+  macro_step_fields:
+    - step_key
+    - action_name
+    - selector
+    - value
+    - timeout_ms
+    - continue_on_error
+    - extra_args
+
+action_catalog:
+  namespace: uia
+  stable_actions:
+    - uia.registry.get
+    - uia.adapter.update
+    - uia.target.save
+    - uia.target.launch
+    - uia.target.stop
+    - uia.target.state
+    - uia.macro.save
+    - uia.macro.list
+    - uia.macro.delete
+    - uia.macro.run
+    - uia.recording.start
+    - uia.recording.stop
+    - uia.recording.state
+  rules:
+    - all actions are callable from batcli action run
+    - gui controls dispatch these same names
+    - runtime control server remains the audit root
+
+uiapeek_adapter_model:
+  provider_key: uiapeek
+  relationship_to_flaui: >
+    This block describes the first concrete adapter path (UiaPeek CLI) for step invocation.
+    Product intent places stable execution on a FlaUI-class engine; UiaPeek remains the
+    inspector/recorder-side tool in the stack described under desktop_uia_tooling_roles.
+  adapter_contract:
+    - adapter executable path may be set in uia_adapter.executable_path; when empty the host resolves UiaPeek (CLIBASE_UIAPEEK_EXE, then common install folders, then where/PATH, then the bare name uiapeek)
+    - adapter invocations use explicit step action names, selectors, and timeout
+    - adapter failures must return structured error text
+    - uia.registry.get includes uiapeek_resolution with resolved_executable and resolution_source for GUI and operators
+  abstraction_rule:
+    - control-plane action names remain provider-neutral uia.* names
+    - provider-specific CLI arguments stay inside host adapter implementation
+  fallback_policy:
+    - if uiapeek executable cannot be resolved and the bare name fails to spawn, run action fails with a clear install/config message
+  recording_to_macro_assist:
+    - Verification UI formats recording events as pretty JSON and can append draft flaui.click or uiapeek.invoke steps from the last event when AutomationId/Name/ControlType-like fields are present
+    - The renderer buffers every recording IPC payload (capped) while SignalR is active; Generate flaui macro from session maps the full buffer to flaui.click and merged flaui.set_text (default) or flaui.type via src/utils/uiaRecordingSessionToMacro.ts — set_text sets the whole edit value (pywinauto set_edit_text), matching clear/select-all then typing when only those printable keys were captured; use merged flaui.type when appending keystrokes is intended
+    - Save session as macro persists those steps through uia.macro.save with the current macro_key and target_key; Start recording clears the buffer for a new session
+
+run_result_contract:
+  run_fields:
+    - macro_key
+    - target_key
+    - status
+    - started_at
+    - finished_at
+    - step_results
+  step_result_fields:
+    - step_key
+    - action_name
+    - ok
+    - exit_code
+    - duration_ms
+    - stdout
+    - stderr
+    - error_code
+    - error_message
+  rules:
+    - every step emits a deterministic result item
+    - failed steps include readable reason fields
+    - run result can be persisted or exported by follow-up actions
+
+sharing_model:
+  rules:
+    - macros are shareable through workspace yaml file exchange
+    - macro files are human-reviewable before execution
+    - project policies may restrict which macros are runnable
+
+security_and_policy:
+  rules:
+    - executable launch paths are explicit and auditable
+    - secret values must not be embedded in macro yaml
+    - destructive macro execution may require policy confirmation
+    - unsigned/untrusted automation binaries follow trust policy from 24-trust-and-package-source-policy.yaml
+
+verification_targets:
+  - a user can save a target profile and relaunch after app restart
+  - a user can save a multi-step macro and run it from gui
+  - batcli action run can invoke uia.macro.run with the same result shape
+  - missing uiapeek executable produces a readable actionable error
+  - terminal lane remains available while verification lane is active
+
+implementation_status:
+  renderer:
+    - left side `Verification` tab is implemented in `src/app/App.tsx`
+    - top lane handles adapter/target/macro forms and result panel
+    - bottom lane remains the same PTY terminal panel
+    - Runtime status panel shows `running_targets` (EXE Running/Stopped, PID, launched) and UiaPeek hub connection/recording/session plus resolved UiaPeek.exe; `clibase:uia:runtime-status` IPC polls about every 5s while Verification is open
+  host_runtime:
+    - IPC bridge and runtime actions are wired in main/preload/runtime-control
+    - `clibase:uia:runtime-status` aggregates host registry running_targets, recording bridge state, and `uiapeek_http_ping_ok` (GET /api/v4/g4/ping) so the UI can separate HTTP reachability from SignalR Disconnected idle
+    - `workspace/uia-macros.yaml` persists target and macro contracts
+    - `scripts/ensure-uiapeek.mjs` plus `batcli uia-peek download` / optional `batcli install` step place vendor/uia-peek/UiaPeek.exe for offline-first resolution
+    - `electron/host-services/uia-macro/uiapeek-http-launcher.cts` starts UiaPeek.exe when localhost hub is down before SignalR connect
+    - `electron/host-services/uia-macro/uiapeek-recording-bridge.cts` connects SignalR to
+      verification UI and batcli `uia.recording.*` actions
+    - `electron/host-services/uia-macro/windows-host-window-constraint.cts` applies Windows
+      host_reference_frame: process-tree PID filter, SetWindowPos, WM_GETMINMAXINFO subclass, soft fallback
+  notes:
+    - CLI multiline payload quoting can be fragile on Windows; `steps_file` input is supported for reliable macro save
+    - uia.target.save accepts optional host_reference_frame object or flat host_reference_width_px and host_reference_height_px
+
+batcli_examples:
+  - batcli uia-peek download
+  - batcli action run --action uia.registry.get
+  - batcli action run --action uia.adapter.update --executable_path "C:\\tools\\uiapeek.exe" --default_timeout_ms 5000
+  - batcli action run --action uia.target.save --target_key target-notepad --exe_path "C:\\Windows\\System32\\notepad.exe"
+  - batcli action run --action uia.target.save --target_key target-gennx --exe_path "C:\\Path\\GenNX.exe" --host_reference_width_px 1280 --host_reference_height_px 720 --host_reference_coordinate_space host_reference --host_reference_placement_mode external_os_window
+  - batcli action run --action uia.macro.save --macro_key macro-notepad-smoke --target_key target-notepad --steps_file "workspace/uia-steps-smoke.yaml"
+  - batcli action run --action uia.macro.run --macro_key macro-notepad-smoke --target_key target-notepad --ensure_target_running true
+  - batcli action run --action uia.recording.state
+  - batcli action run --action uia.recording.start
+
+references:
+  official:
+    - https://github.com/g4-api/uia-peek
+    - https://learn.microsoft.com/windows/win32/winauto/entry-uiauto-win32
+    - https://learn.microsoft.com/dotnet/framework/ui-automation/ui-automation-overview
+    - https://openai.com/index/harness-engineering/

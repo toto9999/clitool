@@ -21,8 +21,10 @@
 ## 전체 화면 구조
 
 - 전역 사이드바: 맨 위에 프로젝트 관리 아이콘, 그 아래에 저장된 프로젝트 아이콘
-- 프로젝트 탭 사이드바: 프로젝트 진입 후 탭 목록 표시
+- 프로젝트 탭 스트립: 프로젝트 진입 후 IDE처럼 상단에 탭 목록 표시
 - 중앙 작업 영역: 현재 선택된 탭의 레이아웃과 모듈을 렌더링
+- 하단 next navigation: ordered project tab 흐름을 따라 다음 탭으로 이동
+- 분리 창: 탭 스트립에서 드래그한 탭을 새 top-level window로 띄워 멀티모니터에서 사용
 
 ## 제품 관점 요약
 
@@ -38,6 +40,8 @@
 - 프로젝트 메타데이터 편집
 - 프로젝트 내부 탭 생성/정렬/삭제
 - 탭별 레이아웃과 모듈 구성 설계
+- 탭별 통신 범위와 cross-tab 허용 정책 설정
+- 탭의 docked/detached window 기본 동작과 next navigation 흐름 설정
 - 프로젝트별 CLI 파생, Skill attachment, MCP attachment, action policy 설정
 - 프로젝트에서 사용할 auth provider와 callback 정책 선택
 - 프로젝트에서 사용할 browser automation target과 Playwright MCP attachment 정책 선택
@@ -54,6 +58,7 @@
 - 각 탭의 레이아웃 타입 선택
 - 각 탭에 들어갈 모듈 선택 및 배치
 - 모듈별 UI/동작 설정의 시작점 제공
+- 탭 간 통신 정책, explicit binding, detachable window 동작 편집
 - 프로젝트 수준의 automation surface와 action exposure 정책 편집
 
 ## 프로젝트 작업공간 역할
@@ -61,6 +66,7 @@
 - 설계 결과를 실제 작업 셸처럼 보여주는 런타임 화면
 - 프로젝트 탭 전환
 - 탭별 독립 레이아웃 렌더링
+- IDE형 상단 탭, 하단 next 버튼, detached window를 통한 멀티모니터 작업
 - 이후 실제 모듈 실행이 붙을 자리 확보
 
 ## 사용자 흐름
@@ -79,6 +85,8 @@
 - 탭 설정은 프로젝트 내부 배열로 관리한다.
 - 모듈은 카탈로그와 인스턴스를 분리해 같은 모듈의 다중 배치를 허용한다.
 - 레이아웃은 탭 단위로 저장하고, 모듈 위치 정보는 레이아웃 슬롯 기준으로 매핑한다.
+- 탭 간 통신은 기본적으로 격리하고, 허용된 cross-tab binding만 control plane을 통해 흐르게 한다.
+- 탭의 분리 창 상태와 모니터 배치는 durable preference와 volatile placement 상태를 나눠 관리해야 한다.
 - 각 프로젝트는 글로벌 CLI에서 파생된 자신의 effective CLI 컨텍스트를 가진다.
 - 글로벌 CLI가 제품 전체 제어의 기준이며, 프로젝트 CLI는 그 파생이다.
 - 최종 Global CLI interactive UX는 React 패널이 아니라 Textual host로 수렴해야 한다.

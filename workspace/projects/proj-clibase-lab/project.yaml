@@ -1,0 +1,16 @@
+project_key: proj-clibase-lab
+project_name: CLIBase Lab
+icon_key: flask-conical
+default_tab_key: tab-lab-01
+cli_profile_key: cli-global-default
+cli_overrides:
+  startup_directory: C:/MIDAS/code/clibase
+  env_overrides:
+    CLIBASE_PROJECT_KEY: proj-clibase-lab
+    CLIBASE_PROJECT_MODE: lab
+project_policies:
+  browser_policy_key: policy-browser-standard
+  terminal_policy_key: policy-terminal-standard
+  control_plane_policy_key: policy-control-plane-standard
+tab_order:
+  - tab-lab-01

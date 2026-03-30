@@ -1,0 +1,14 @@
+profiles:
+  - cli_profile_key: cli-global-default
+    base_cli_profile_key: null
+    cli_settings:
+      shell_profile_key: shell-pwsh-default
+      runner_key: runner-local-shell
+      startup_directory: C:/MIDAS/code/clibase
+      env_defaults:
+        CLIBASE_ENV: development
+    secret_refs: []
+    allowed_module_types:
+      - terminal
+      - ai-assistant
+    description: Global CLI base

@@ -25,19 +25,25 @@
   - `electron/preload/preload.cts`
   - `tsconfig.electron.json`
   - `package.json`의 Electron dev/build/typecheck 스크립트
+  - `scripts/run-electron-dev.cjs`
   - `scripts/launch-electron-dev.cjs`
   - 렌더러에서 preload bridge 연결 상태를 확인하는 최소 화면
 - 1차 성공 기준:
-  - `npm run dev`로 Vite renderer와 Electron desktop shell이 함께 뜬다
+  - `batcli dev`로 Vite renderer와 Electron desktop shell이 함께 뜬다
   - preload `ping` IPC가 렌더러에서 호출된다
-  - `npm run build`가 renderer와 electron entry를 함께 산출한다
-  - `npm run typecheck`가 renderer와 electron 코드를 함께 검사한다
+  - `batcli build`가 renderer와 electron entry를 함께 산출한다
+  - `batcli typecheck`가 renderer와 electron 코드를 함께 검사한다
 
 ## Phase 3. Terminal Foundation
 
+- 상태: 진행중
 - `xterm.js` 기반 터미널 렌더러 도입
 - `node-pty` 기반 PTY 서비스 구성
 - 세션 생성/입력/출력/resize/종료 계약 정의
+- 다음 구현 슬라이스:
+  - preload terminal bridge 추가
+  - renderer에 in-app xterm terminal surface 연결
+  - active terminal target을 workspace state와 동기화
 
 ## Phase 4. Embedded Browser Foundation
 
@@ -71,6 +77,7 @@
 - `23-verification-and-release-gates.yaml` 기준으로 poc gate와 release gate 기준 확정
 - `24-trust-and-package-source-policy.yaml` 기준으로 package/binary/skill/mcp/ref source trust 전략 확정
 - `17-central-architecture.md` 기준으로 전체 아키텍처 중앙 문서와 상세 계약 문서의 관계를 고정
+- `25-project-aware-layout-and-windowing.yaml`과 `26-interaction-and-docking-foundation.yaml` 기준으로 탭/윈도우/도킹/분리/복원 UX 기준 확정
 - 1차 runtime action skeleton 산출물:
   - `batcli action run`
   - local runtime-host control transport
@@ -80,6 +87,16 @@
   - `browser.get-state`
   - `browser.navigate`
   - `browser.automation.click`
+- 다음 기반 산출물:
+  - deterministic dev runtime bootstrap
+  - `workspace/` yaml bootstrap and loader
+  - runtime registry for project/tab/module/browser ownership
+  - `workspace.get-state`
+  - registry-backed browser state resolution
+  - `batcli tui` Textual host skeleton using the same action catalog
+  - `terminal.create`, `terminal.write`, `terminal.resize`, `terminal.kill`, `terminal.logs.tail`
+  - durable yaml action/event/audit log bucket writer
+  - project.open / project.switch
 - 1차 성공 기준:
   - 실행 중인 Electron app에 `batcli action run --action app.ping` 이 응답한다
   - `batcli action run --action app.logs.tail` 이 host runtime log를 반환한다
@@ -87,6 +104,7 @@
   - `batcli action run --action browser.get-state` 가 현재 embedded browser surface 상태를 반환한다
   - `batcli action run --action browser.navigate --url <url>` 이 embedded browser surface를 실제로 이동시킨다
   - `batcli action run --action browser.automation.click --selector <css>` 가 초기 click automation을 수행한다
+  - `batcli action run --action terminal.create` 와 `terminal.write` 가 host-owned PTY 세션을 실제로 제어한다
 
 ## Phase 6. Domain Skeleton
 
@@ -112,6 +130,9 @@
 - 프로젝트 탭 사이드바와 중앙 작업영역 연결
 - 탭별 레이아웃 렌더러 구현
 - 모듈 슬롯 렌더링 규칙 확정
+- IDE형 상단 탭 스트립과 하단 next navigation 규칙 구현
+- 탭 분리 새 창, 멀티모니터 배치, window-to-tab ownership 구현
+- 탭 간 통신 정책과 explicit cross-tab binding 흐름 구현
 
 ## Phase 9. Persistence And Contracts
 
@@ -155,3 +176,6 @@
 20. Electron 메인/프리로드/렌더러 최소 골격을 만들기
 21. 중앙 아키텍처 문서에 실제 코드 트리와 Electron skeleton 책임을 반영하기
 22. 터미널 PTY 서비스와 브라우저 surface의 최소 PoC를 따로 검증하기
+23. `workspace/` yaml bootstrap과 runtime registry를 붙여 browser action을 project system으로 승격하기
+24. `batcli tui`로 Textual interactive host skeleton을 붙여 Global CLI UX의 실제 시작점을 만들기
+25. `26-interaction-and-docking-foundation.yaml` 기준으로 split resize, redock zone, pane restore 계약을 먼저 고정하기

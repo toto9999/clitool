@@ -11,6 +11,51 @@ export interface RuntimeLogEntry {
 const runtimeLogs: RuntimeLogEntry[] = [];
 const maxLogEntries = 200;
 let logSequence = 0;
+let consoleGuardsInstalled = false;
+
+function isBrokenPipeError(error: unknown) {
+  return (
+    !!error &&
+    typeof error === "object" &&
+    "code" in error &&
+    error.code === "EPIPE"
+  );
+}
+
+function installConsoleStreamGuards() {
+  if (consoleGuardsInstalled) {
+    return;
+  }
+
+  consoleGuardsInstalled = true;
+
+  for (const stream of [process.stdout, process.stderr]) {
+    stream.on("error", (error) => {
+      if (isBrokenPipeError(error)) {
+        return;
+      }
+
+      throw error;
+    });
+  }
+}
+
+function writeConsoleLine(
+  stream: NodeJS.WriteStream,
+  line: string,
+) {
+  if (stream.destroyed || stream.writableEnded) {
+    return;
+  }
+
+  try {
+    stream.write(`${line}\n`);
+  } catch (error) {
+    if (!isBrokenPipeError(error)) {
+      throw error;
+    }
+  }
+}
 
 function getReadableLogKey() {
   const now = new Date();
@@ -35,6 +80,8 @@ export function recordRuntimeLog(
   message: string,
   detail?: Record<string, string | number | boolean | null | undefined>,
 ) {
+  installConsoleStreamGuards();
+
   const entry: RuntimeLogEntry = {
     log_key: getReadableLogKey(),
     level,
@@ -57,18 +104,19 @@ export function recordRuntimeLog(
   const detailSuffix = entry.detail
     ? ` ${JSON.stringify(entry.detail)}`
     : "";
+  const consoleLine = `[runtime:${level}] ${message}${detailSuffix}`;
 
   if (level === "error") {
-    console.error(`[runtime:${level}] ${message}${detailSuffix}`);
+    writeConsoleLine(process.stderr, consoleLine);
     return entry;
   }
 
   if (level === "warn") {
-    console.warn(`[runtime:${level}] ${message}${detailSuffix}`);
+    writeConsoleLine(process.stderr, consoleLine);
     return entry;
   }
 
-  console.log(`[runtime:${level}] ${message}${detailSuffix}`);
+  writeConsoleLine(process.stdout, consoleLine);
   return entry;
 }
 

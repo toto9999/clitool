@@ -1,0 +1,124 @@
+version: 0.1.0
+
+contract_scope:
+  purpose: >
+    Define the mandatory UI engineering rules so layout, resizing, docking,
+    host-surface synchronization, and interaction behavior remain stable as the
+    product grows.
+  status: draft-authoritative
+
+north_star:
+  statement: >
+    The workspace must behave like a reliable IDE shell: no panel overlap
+    surprises, no post-resize snapback, and no hidden ownership conflicts
+    between renderer UI and Electron-native surfaces.
+
+ui_ownership_model:
+  renderer_owned:
+    - tab strip layout
+    - split handle interactions
+    - browser lane chrome and control cards
+    - terminal lane chrome and input controls
+    - state projection for active tab, browser key, terminal key
+  host_owned:
+    - BrowserWindow lifecycle and bounds
+    - WebContentsView lifecycle and actual host bounds
+    - PTY runtime lifecycle
+    - runtime control endpoint and durable logs
+  integration_rule:
+    - renderer decides intent and slot bounds
+    - main process applies native surface bounds and visibility
+    - host and renderer must not both invent independent layout truth
+
+resize_and_layout_rules:
+  principles:
+    - split drag updates must be frame-throttled
+    - draft layout state must remain until host state ack arrives
+    - host-bounds sync is required for browser lane changes
+    - collapsed lanes must release native bounds to zero or null consistently
+  forbidden:
+    - clearing draft ratios immediately on pointer-up before persisted state returns
+    - leaving native browser surface visible before renderer slot bounds exist
+    - allowing seed page chrome to visually mimic or cover host chrome
+    - mixing multiple layout ownership paths with conflicting defaults
+  required_verification:
+    - drag split repeatedly and confirm no one-frame snapback
+    - resize the window and confirm browser surface follows slot without drift
+    - switch tabs and confirm active browser lane remains inside host slot
+    - collapse and expand browser lane and confirm visibility and bounds recovery
+
+panel_and_layer_policy:
+  layer_rules:
+    - outer workbench shell remains the top-level structure
+    - browser seed content is inner content only and must not impersonate outer shell
+    - floating controls are allowed only when they can collapse and never block core flow
+  z_index_rule:
+    - z-index tokens must be centralized by lane type and not ad-hoc per component
+  scrolling_rule:
+    - no nested full-height scroll surfaces that hide actionable controls
+    - each lane defines one primary scroll container
+
+ui_readability_policy:
+  rules:
+    - ui text and logs should expose readable refs first, not opaque long payload strings
+    - ui should avoid long meaningless identifier strings; prefer short semantic aliases for object targets
+    - browser seed targets should be shown as seed:// aliases rather than raw data:text/html payloads
+    - seed:// alias mapping lives in workspace/browser-seeds.yaml and is the canonical registry
+    - if runtime surfaces produce long technical urls, ui should render a stable readable label while preserving raw value internally
+
+ui_change_documentation_matrix:
+  shell_or_layout_changes:
+    must_update:
+      - doc/3. Platform/27-ui-engineering-governance.yaml
+      - doc/3. Platform/26-interaction-and-docking-foundation.yaml
+      - doc/3. Platform/17-central-architecture.md
+  interaction_model_changes:
+    must_update:
+      - doc/3. Platform/27-ui-engineering-governance.yaml
+      - doc/3. Platform/26-interaction-and-docking-foundation.yaml
+  runtime_surface_bridge_changes:
+    must_update:
+      - doc/3. Platform/27-ui-engineering-governance.yaml
+      - doc/3. Platform/04-runtime-platform-plan.md
+      - doc/3. Platform/07-control-plane-and-observability.yaml
+  ui_state_shape_or_performance_changes:
+    must_update:
+      - doc/3. Platform/27-ui-engineering-governance.yaml
+      - doc/3. Platform/19-performance-and-optimization-policy.yaml
+
+workflow_enforcement:
+  required_pre_read_documents:
+    - doc/3. Platform/17-central-architecture.md
+    - doc/3. Platform/26-interaction-and-docking-foundation.yaml
+    - doc/3. Platform/27-ui-engineering-governance.yaml
+  watched_ui_code_paths:
+    - src/main.tsx
+    - src/app/
+    - src/styles/
+    - electron/preload/
+    - electron/main/
+    - electron/host-services/browser/
+  required_ui_doc_paths_for_guard:
+    - doc/3. Platform/27-ui-engineering-governance.yaml
+    - doc/3. Platform/26-interaction-and-docking-foundation.yaml
+    - doc/3. Platform/17-central-architecture.md
+    - doc/9. Worklog/99-worklog.md
+  guard_behavior:
+    - batcli docs validate checks required documents and ui guard
+    - batcli verify checks required documents and ui guard
+    - batcli workflow stop blocks completion when ui guard fails
+
+definition_of_done_for_ui:
+  required:
+    - ui behavior is controllable by batcli/runtime actions where applicable
+    - no overlap regression in browser lane, shell lane, and terminal lane
+    - resize behavior is smooth and deterministic under repeated drag
+    - document updates are committed with the same change set
+    - worklog entry records the exact ui foundation or policy change
+
+references:
+  official:
+    - https://www.electronjs.org/docs/latest/api/web-contents-view
+    - https://www.electronjs.org/docs/latest/api/browser-window
+    - https://www.electronjs.org/docs/latest/tutorial/security
+    - https://developer.mozilla.org/en-US/docs/Web/API/ResizeObserver

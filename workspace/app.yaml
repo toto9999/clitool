@@ -1,0 +1,5 @@
+default_cli_profile_key: cli-global-default
+cli_defaults:
+  shell_profile_key: shell-pwsh-default
+  runner_key: runner-local-shell
+  startup_directory: C:/MIDAS/code/clibase

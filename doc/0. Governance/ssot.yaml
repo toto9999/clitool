@@ -6,13 +6,43 @@ project:
   active_runtime: vite-react-mantine
   target_runtime_host: electron-desktop-shell
   product_positioning: cli-first automation workbench
+  desktop_uia_stack_note: >
+    Desktop UIA: FlaUI-class tooling as the primary execution spine for macro replay;
+    UiaPeek-class tooling as inspector/recorder assist. See 28-desktop-uia-macro-verification.yaml.
   primary_operator_profile: semi-technical power user with light code literacy
 
 documentation:
   architecture_master_document: doc/3. Platform/17-central-architecture.md
+  ui_governance_document: doc/3. Platform/27-ui-engineering-governance.yaml
+  agent_guide_document: AGENTS.md
+  agent_compat_document: AGENT.md
+  agent_governance_document: doc/0. Governance/agent-governance.md
+  validation_guards:
+    - required_documents_must_exist_and_be_non_empty
+    - ui_change_guard_for_watched_paths
+    - readable_identifier_guard_for_workspace_and_state_yaml
+    - object_reference_prefix_guard_for_all_key_fields
+    - address_alias_guard_for_home_url_and_seed_registry
+  ui_change_guard:
+    enabled: true
+    watched_code_paths:
+      - src/main.tsx
+      - src/app/
+      - src/styles/
+      - electron/preload/
+      - electron/main/
+      - electron/host-services/browser/
+    required_doc_paths:
+      - doc/3. Platform/27-ui-engineering-governance.yaml
+      - doc/3. Platform/26-interaction-and-docking-foundation.yaml
+      - doc/3. Platform/17-central-architecture.md
+      - doc/9. Worklog/99-worklog.md
   required_documents:
+    - AGENT.md
+    - AGENTS.md
     - doc/0. Governance/ssot.yaml
     - doc/0. Governance/ddd.md
+    - doc/0. Governance/agent-governance.md
     - doc/0. Governance/workflow-rules.md
     - doc/1. Strategy/14-product-direction.md
     - doc/1. Strategy/16-project-operating-model.md
@@ -37,6 +67,10 @@ documentation:
     - doc/3. Platform/22-build-packaging-and-update.yaml
     - doc/3. Platform/23-verification-and-release-gates.yaml
     - doc/3. Platform/24-trust-and-package-source-policy.yaml
+    - doc/3. Platform/25-project-aware-layout-and-windowing.yaml
+    - doc/3. Platform/26-interaction-and-docking-foundation.yaml
+    - doc/3. Platform/27-ui-engineering-governance.yaml
+    - doc/3. Platform/28-desktop-uia-macro-verification.yaml
     - doc/9. Worklog/99-worklog.md
   doc_first_rule: true
 
@@ -85,8 +119,10 @@ product:
   shell_structure:
     global_sidebar:
       purpose: project management entry and project switching
-    project_tab_sidebar:
-      purpose: per-project tab switching
+    project_tab_strip:
+      purpose: per-project ide-style tab switching and detachable tab entry
+    next_tab_navigation:
+      purpose: bottom next-step movement across ordered project tabs
     workspace_canvas:
       purpose: render tab-specific layout and module composition
   native_capabilities:
@@ -125,12 +161,22 @@ design_constraints:
   persistence_format: yaml-first
   identifier_policy:
     allowed_style: readable-kebab-case
+    readability_limits:
+      key_or_ref_max_length: 48
+      requirement: prefer short semantic aliases over long technical strings
     forbidden:
       - uuid
       - ulid
       - nanoid
       - opaque-hash
       - unreadable-random-token
+      - long-meaningless-character-sequences
+  reference_alias_policy:
+    - persisted configuration must prefer readable aliases over long opaque payload strings
+    - workspace and workspace-state references use short readable aliases across all *_key and *_ref fields
+    - field families must keep readable prefixes (proj-, tab-, mod-, browser-, term-, window-, sess-, cli-, policy-, seed://)
+    - browser seed pages use seed://<readable-key> aliases and resolve through a yaml mapping registry
+    - raw data:text payloads may exist at runtime but should not be the primary persisted source value
   communication_policy:
     - module to module calls must go through a central bus
     - runtime transport may use structured objects, but the contract source of truth is yaml
@@ -143,6 +189,7 @@ design_constraints:
     - secrets are referenced, not embedded
     - the authoritative global cli executable is batcli
     - install, dev, build, typecheck, and verify paths must route through batcli rather than bypassing it as the primary operator contract
+    - dependency add or update operations for product development should be mediated by batcli commands rather than direct package-manager invocation
     - the authoritative interactive global cli host uses Textual
     - reusable upstream cli libraries may be staged under ref/ as analysis references, but product behavior must be reimplemented in owned code rather than linked directly
     - multiline paste, link paste, and image-oriented attachment ingestion are first-class global cli usability requirements
@@ -193,6 +240,14 @@ design_constraints:
   ide_policy:
     - ide-like workspace requires browser, terminal, editor, task, and log panels as first-class concepts
     - project-scoped runtime environments are preferred over global installs
+    - project tabs use an ide-style top tab strip rather than a sidebar as the primary tab surface
+    - a tab may be docked in the main window or detached into a separate project-owned window
+    - cross-tab communication must be explicit, policy-controlled, and readable in yaml
+    - tab docking, split resizing, and redock behavior must be explicit, reversible, and restorable
+  ui_policy:
+    - ui layout ownership, resize behavior, and panel layering must follow `27-ui-engineering-governance.yaml`
+    - ui code changes under guarded paths require concurrent update of at least one declared ui governance document
+    - workflow completion is blocked when guarded ui changes do not include required ui document updates
 
 domain:
   entities:
@@ -234,9 +289,10 @@ domain:
     - observability quality differences between libraries must be explicit and normalized
     - ai recommendations must come from declared semantic manifests and binding policies
     - browser, terminal, editor, and package-manager actions must remain policy-controlled and observable
+    - desktop exe verification and uia macro execution must remain action-driven and yaml-addressable
     - project channel exposure and port allocation must remain deterministic and conflict-free
 
-implementation_status:
+  implementation_status:
   ui_shell_reset: done
   governance_docs_restored: done
   cli_enforcement_reconnection: done
@@ -251,3 +307,5 @@ implementation_status:
   build_packaging_update_contract: done
   verification_release_gates_contract: done
   trust_package_source_policy_contract: done
+  project_aware_layout_windowing_contract: done
+  desktop_uia_macro_verification_contract: done

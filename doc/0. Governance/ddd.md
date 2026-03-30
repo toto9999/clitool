@@ -4,7 +4,7 @@
 
 ### workspace-shell
 
-- Scope: 전역 사이드바, 프로젝트 진입, 프로젝트 탭 사이드바, 중앙 작업 셸
+- Scope: 전역 사이드바, 프로젝트 진입, 프로젝트 상단 탭 스트립, 중앙 작업 셸, 분리 창
 - Main screens: `ProjectManagement`, `ProjectEditor`, `ProjectWorkspace`
 - Responsibility: 화면 전환 구조와 전체 정보 구조를 유지한다.
 
@@ -73,6 +73,10 @@
 - `ReleaseGate`: 배포 전에 반드시 통과해야 하는 검증 기준
 - `TrustedSource`: 패키지, 바이너리, Skill, MCP, ref 자산의 출처와 신뢰 수준 기록
 - `ProjectTab`: 프로젝트 내부의 독립 작업 공간
+- `ProjectTabStrip`: 프로젝트 내부 탭을 IDE처럼 상단에 배치하는 주 탭 surface
+- `ProjectWindow`: 하나의 프로젝트에 속한 메인 또는 분리 런타임 창
+- `DetachedTabWindow`: 특정 탭을 별도 top-level window로 분리한 런타임 창
+- `TabCommunicationPolicy`: 탭 내부 통신만 허용할지, 명시된 cross-tab 통신을 허용할지 정의하는 정책
 - `ModuleCatalogItem`: 공통 모듈 정의
 - `ModuleInstance`: 특정 탭에 배치된 모듈 인스턴스
 - `LayoutTemplate`: 탭에 적용되는 배치 규칙
@@ -99,19 +103,28 @@
 - `AuthSession`: 외부 시스템 브라우저 인증, PKCE state, callback 만료를 관리하는 런타임 상태 단위
 - `ProjectManagement`: 프로젝트를 설계하는 화면
 - `ProjectWorkspace`: 저장된 프로젝트를 실행 관점에서 보는 화면
+- `UIEngineeringGovernance`: UI 레이아웃 소유권, 리사이즈 동기화, 패널 레이어링, 문서-코드 동기 검증을 정의한 강제 계약
+- `SeedUrlRef`: 브라우저 seed 시작 페이지를 가리키는 읽기 쉬운 `seed://<purpose>` 별칭
+- `ObjectKeyAlias`: `project_key`, `tab_key`, `module_key`, `browser_key`, `terminal_key`, `window_key` 같은 객체 식별자를 UUID 대신 prefix 기반 짧은 별칭으로 관리하는 규약
+- `AgentGovernance`: 루트 `AGENTS.md`(짧은 맵), `AGENT.md`(호환 엔트리), `agent-governance.md`(상세 규약)로 구성된 에이전트 운영 기준
+- `FlaUIExecutor`: 데스크톱 Win32 UIA 쪽에서 매크로 재실행·작업 수행을 맡기는 실행 엔진 축; 매크로 저장·재실행·안정적 운용의 중심으로 둔다
+- `UiaPeekInspector`: Peek/Record/체인·경계 확인 등 “현장 조사·탐색기” 축; 셀렉터·구조 파악·recorder 보조에 쓰고 실행 본체와 분리해 둔다
 
 ## Development Rule
 
 - 구조, 용어, 엔티티가 바뀌면 `doc/0. Governance/ssot.yaml`과 이 문서를 먼저 수정한다.
+- 에이전트 작업 절차, 하네스 검증 기준, AGENT/AGENTS 운영 규칙이 바뀌면 `AgentGovernance` 문서를 먼저 수정한다.
 - 전체 아키텍처 수준의 변경은 `CentralArchitectureDocument`를 먼저 갱신하고, 이후 세부 계약 문서를 맞춘다.
 - `CentralArchitectureDocument`는 개념 요약만이 아니라 `CodebaseMap`, 현재 구현 상태, 핵심 플로우를 포함해야 한다.
 - 이 제품의 중심은 GUI가 아니라 `AutomationWorkbench`와 그 핵심 제어면인 `GlobalCLIBase`다.
 - `BatCLI`는 GlobalCLIBase의 공식 실행 이름이며, workflow와 제품 제어 명령은 이 namespace 아래에 모인다.
 - `TextualCLIHost`는 최종 Global CLI UX의 기준이며, 현재 React 패널은 임시 프로토타입이다.
 - `ProjectManagement`는 편집 화면이지 런타임 화면이 아니다.
-- 전역 사이드바는 프로젝트 전환용이며, 프로젝트 탭 사이드바는 탭 전환용이다.
+- 전역 사이드바는 프로젝트 전환용이며, 프로젝트 탭 전환의 주 surface는 `ProjectTabStrip`이다.
+- `DetachedTabWindow`는 제품 요구이며, macOS 전용 native tab 기능에 기대지 않고 제품 코드에서 관리한다.
 - 모듈은 프로젝트 전용 정의가 아니라 공통 카탈로그에서 가져온다.
 - 탭마다 레이아웃과 모듈 구성이 독립적이어야 한다.
+- `TabCommunicationPolicy` 없이 탭 간 메시지를 암묵적으로 허용하면 안 된다.
 - 브라우저 모듈과 터미널 모듈은 직접 서로를 호출하지 않고 `ModuleBus`를 통해 통신한다.
 - GUI, Global CLI, Project CLI, Skill, MCP는 직접 구현 내부를 호출하지 않고 `ControlPlane`에 `ControlAction`을 보낸다.
 - 새 기능은 GUI에만 붙어 있으면 완료된 것이 아니며, `GlobalCLIBase`와 `ProjectCLIContext`를 통해 제어 가능해야 한다.
@@ -143,3 +156,4 @@
 - 문서 변경이 필요한 작업은 반드시 `to-doc` 단계에서 먼저 처리한다.
 - 문서 반영 없이 코드 구현을 진행하면 안 된다.
 - 구현 후 문서가 달라졌다면 다시 `to-doc`로 돌아가서 맞춘 뒤 진행한다.
+- UI 코드 변경(`src/main.tsx`, `src/app/*`, `src/styles/*`, `electron/preload/*`, `electron/main/*`, `electron/host-services/browser/*`)은 `UIEngineeringGovernance` 문서를 참고하고 필요한 경우 같은 작업에서 갱신해야 한다.

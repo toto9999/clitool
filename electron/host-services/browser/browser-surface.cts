@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import { BrowserWindow, WebContentsView } from "electron";
+import { BrowserWindow, WebContents, WebContentsView } from "electron";
 import { recordRuntimeLog } from "../runtime-control/runtime-logging.cjs";
 
 const browserPlaceholderUrl = `data:text/html;charset=UTF-8,${encodeURIComponent(`<!doctype html>
@@ -72,6 +72,9 @@ export interface BrowserSurfaceState {
   page_title: string;
   is_loading: boolean;
   is_visible: boolean;
+  is_collapsed: boolean;
+  can_go_back: boolean;
+  can_go_forward: boolean;
   bounds: {
     x: number;
     y: number;
@@ -80,28 +83,235 @@ export interface BrowserSurfaceState {
   };
 }
 
-function getBrowserBounds(mainWindow: BrowserWindow) {
+export interface BrowserClickResult {
+  ok: true;
+  tag_name: string;
+  text: string;
+  rect: { x: number; y: number; width: number; height: number };
+  page_title: string;
+  page_url: string;
+}
+
+export interface BrowserFillResult {
+  ok: true;
+  tag_name: string;
+  input_type: string | null;
+  value_length: number;
+  page_title: string;
+  page_url: string;
+}
+
+export interface BrowserExtractTextResult {
+  ok: true;
+  selector: string;
+  tag_name: string;
+  text: string;
+  text_length: number;
+  page_title: string;
+  page_url: string;
+}
+
+export interface BrowserAutomationErrorResult {
+  ok: false;
+  reason: string;
+  tag_name?: string;
+  text?: string;
+  input_type?: string | null;
+}
+
+interface BrowserSurfaceOptions {
+  browserKey?: string;
+  initialUrl?: string | null;
+  initialShellSplitRatio?: number | null;
+  initialBrowserDockPosition?: "left" | "right" | "top" | "bottom" | null;
+  initialBrowserCollapsed?: boolean | null;
+  onBrowserEvent?: (eventName: string, payload: Record<string, unknown>) => void;
+}
+
+type BrowserDockPosition = "left" | "right" | "top" | "bottom";
+type BrowserHostBounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+function toReadableRuntimeUrl(url: string) {
+  const normalized = url.trim();
+  if (!normalized) {
+    return normalized;
+  }
+
+  if (normalized.startsWith("data:text/html")) {
+    return "data://inline-html";
+  }
+
+  if (normalized.startsWith("data:")) {
+    return "data://inline-data";
+  }
+
+  return normalized;
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function normalizeShellSplitRatio(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 0.56;
+  }
+
+  return Math.min(Math.max(value, 0.34), 0.74);
+}
+
+function normalizeBrowserDockPosition(value?: string | null): BrowserDockPosition {
+  if (
+    value === "left" ||
+    value === "right" ||
+    value === "top" ||
+    value === "bottom"
+  ) {
+    return value;
+  }
+
+  return "right";
+}
+
+function normalizeBrowserHostBounds(
+  mainWindow: BrowserWindow,
+  value?: { x?: unknown; y?: unknown; width?: unknown; height?: unknown } | null,
+): BrowserHostBounds | null {
+  if (!value) {
+    return null;
+  }
+
+  const x = typeof value.x === "number" && Number.isFinite(value.x) ? Math.round(value.x) : NaN;
+  const y = typeof value.y === "number" && Number.isFinite(value.y) ? Math.round(value.y) : NaN;
+  const width =
+    typeof value.width === "number" && Number.isFinite(value.width)
+      ? Math.round(value.width)
+      : NaN;
+  const height =
+    typeof value.height === "number" && Number.isFinite(value.height)
+      ? Math.round(value.height)
+      : NaN;
+
+  if (![x, y, width, height].every(Number.isFinite)) {
+    return null;
+  }
+
+  if (width < 48 || height < 48) {
+    return null;
+  }
+
   const contentBounds = mainWindow.getContentBounds();
-  const gutter = 24;
-  const browserWidth = Math.max(Math.round(contentBounds.width * 0.44), 520);
+  const clampedX = clampNumber(x, 0, Math.max(contentBounds.width - 48, 0));
+  const clampedY = clampNumber(y, 0, Math.max(contentBounds.height - 48, 0));
+  const clampedWidth = clampNumber(width, 48, Math.max(contentBounds.width - clampedX, 48));
+  const clampedHeight = clampNumber(height, 48, Math.max(contentBounds.height - clampedY, 48));
 
   return {
-    x: Math.max(contentBounds.width - browserWidth - gutter, gutter),
+    x: clampedX,
+    y: clampedY,
+    width: clampedWidth,
+    height: clampedHeight,
+  };
+}
+
+function resolveShellSize(
+  totalSpan: number,
+  shellSplitRatio: number,
+  preferredMinShell: number,
+  preferredMinBrowser: number,
+) {
+  const maxShell = Math.max(totalSpan - preferredMinBrowser, 0);
+  const minShell = Math.min(preferredMinShell, maxShell);
+
+  if (maxShell <= 0) {
+    return 0;
+  }
+
+  return Math.min(
+    Math.max(Math.round(totalSpan * shellSplitRatio), minShell),
+    maxShell,
+  );
+}
+
+function getBrowserBounds(
+  mainWindow: BrowserWindow,
+  shellSplitRatio: number,
+  browserDockPosition: "left" | "right" | "top" | "bottom",
+  browserCollapsed: boolean,
+) {
+  if (browserCollapsed) {
+    return {
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+    };
+  }
+
+  const contentBounds = mainWindow.getContentBounds();
+  const gutter = 24;
+  const splitter = 14;
+  const isHorizontalDock =
+    browserDockPosition === "top" || browserDockPosition === "bottom";
+
+  if (isHorizontalDock) {
+    const availableHeight = Math.max(contentBounds.height - gutter * 2 - splitter, 280);
+    const shellHeight = resolveShellSize(availableHeight, shellSplitRatio, 420, 280);
+    const browserHeight = Math.max(availableHeight - shellHeight, 0);
+    const browserY =
+      browserDockPosition === "top" ? gutter : gutter + shellHeight + splitter;
+
+    return {
+      x: gutter,
+      y: browserY,
+      width: Math.max(contentBounds.width - gutter * 2, 320),
+      height: Math.max(browserHeight, 0),
+    };
+  }
+
+  const availableWidth = Math.max(contentBounds.width - gutter * 2 - splitter, 320);
+  const shellWidth = resolveShellSize(availableWidth, shellSplitRatio, 420, 320);
+  const browserWidth = Math.max(availableWidth - shellWidth, 0);
+  const browserX =
+    browserDockPosition === "left" ? gutter : gutter + shellWidth + splitter;
+
+  return {
+    x: browserX,
     y: gutter,
-    width: Math.min(browserWidth, contentBounds.width - gutter * 2),
+    width: browserWidth,
     height: Math.max(contentBounds.height - gutter * 2, 260),
   };
 }
 
-function getStateFromView(browserView: WebContentsView): BrowserSurfaceState {
+function canNavigateBack(webContents: WebContents) {
+  return webContents.navigationHistory.canGoBack();
+}
+
+function canNavigateForward(webContents: WebContents) {
+  return webContents.navigationHistory.canGoForward();
+}
+
+function getStateFromView(
+  browserView: WebContentsView,
+  browserKey: string,
+  browserCollapsed: boolean,
+): BrowserSurfaceState {
   const bounds = browserView.getBounds();
 
   return {
-    browser_key: "browser-surface-main",
+    browser_key: browserKey,
     current_url: browserView.webContents.getURL(),
     page_title: browserView.webContents.getTitle(),
     is_loading: browserView.webContents.isLoading(),
     is_visible: browserView.getVisible(),
+    is_collapsed: browserCollapsed,
+    can_go_back: canNavigateBack(browserView.webContents),
+    can_go_forward: canNavigateForward(browserView.webContents),
     bounds: {
       x: bounds.x,
       y: bounds.y,
@@ -117,7 +327,47 @@ async function waitForLoad(browserView: WebContentsView) {
   }
 }
 
-export function createBrowserSurface(mainWindow: BrowserWindow) {
+async function waitForNavigationSettlement(browserView: WebContentsView) {
+  await new Promise((resolve) => setTimeout(resolve, 75));
+
+  if (!browserView.webContents.isLoading()) {
+    return;
+  }
+
+  await Promise.race([
+    once(browserView.webContents, "did-stop-loading"),
+    new Promise((resolve) => setTimeout(resolve, 5000)),
+  ]);
+}
+
+async function loadUrlLenient(browserView: WebContentsView, url: string) {
+  try {
+    await browserView.webContents.loadURL(url);
+    return;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes("ERR_ABORTED")) {
+      throw error;
+    }
+
+    await waitForNavigationSettlement(browserView);
+  }
+}
+
+export function createBrowserSurface(
+  mainWindow: BrowserWindow,
+  options: BrowserSurfaceOptions = {},
+) {
+  let browserKey = options.browserKey?.trim() || "browser-surface-main";
+  const initialUrl = options.initialUrl?.trim() || browserPlaceholderUrl;
+  let shellSplitRatio = normalizeShellSplitRatio(options.initialShellSplitRatio);
+  let browserDockPosition = normalizeBrowserDockPosition(
+    options.initialBrowserDockPosition,
+  );
+  let browserCollapsed = Boolean(options.initialBrowserCollapsed);
+  let browserHostBounds: BrowserHostBounds | null = null;
+  const emitBrowserEvent = options.onBrowserEvent ?? (() => undefined);
+
   const browserView = new WebContentsView({
     webPreferences: {
       contextIsolation: true,
@@ -127,11 +377,22 @@ export function createBrowserSurface(mainWindow: BrowserWindow) {
     },
   });
 
-  browserView.setVisible(true);
+  browserView.setVisible(false);
   mainWindow.contentView.addChildView(browserView);
 
   const layout = () => {
-    browserView.setBounds(getBrowserBounds(mainWindow));
+    const nextBounds =
+      !browserCollapsed && browserHostBounds
+        ? browserHostBounds
+        : {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+          };
+
+    browserView.setVisible(!browserCollapsed && browserHostBounds !== null);
+    browserView.setBounds(nextBounds);
   };
 
   layout();
@@ -150,39 +411,121 @@ export function createBrowserSurface(mainWindow: BrowserWindow) {
 
   browserView.webContents.on("did-start-loading", () => {
     recordRuntimeLog("info", "browser loading started", {
-      url: browserView.webContents.getURL(),
+      url: toReadableRuntimeUrl(browserView.webContents.getURL()),
     });
   });
 
   browserView.webContents.on("did-stop-loading", () => {
+    const readableUrl = toReadableRuntimeUrl(browserView.webContents.getURL());
     recordRuntimeLog("info", "browser loading stopped", {
-      url: browserView.webContents.getURL(),
+      url: readableUrl,
+      title: browserView.webContents.getTitle(),
+    });
+    emitBrowserEvent("browser.page.loaded", {
+      browser_key: browserKey,
+      url: readableUrl,
       title: browserView.webContents.getTitle(),
     });
   });
 
   browserView.webContents.on("did-navigate", (_event, url) => {
+    const readableUrl = toReadableRuntimeUrl(url);
     recordRuntimeLog("info", "browser navigated", {
-      url,
+      url: readableUrl,
+    });
+    emitBrowserEvent("browser.page.navigated", {
+      browser_key: browserKey,
+      url: readableUrl,
     });
   });
 
   browserView.webContents.on("page-title-updated", (_event, title) => {
+    const readableUrl = toReadableRuntimeUrl(browserView.webContents.getURL());
     recordRuntimeLog("info", "browser title updated", {
       title,
     });
+    emitBrowserEvent("browser.title.updated", {
+      browser_key: browserKey,
+      title,
+      url: readableUrl,
+    });
   });
 
-  void browserView.webContents.loadURL(browserPlaceholderUrl);
+  void loadUrlLenient(browserView, initialUrl);
 
   return {
-    browserKey: "browser-surface-main",
+    get browserKey() {
+      return browserKey;
+    },
     view: browserView,
     layout,
-    getState: () => getStateFromView(browserView),
+    getState: () => getStateFromView(browserView, browserKey, browserCollapsed),
+    rebind: async (nextBrowserKey: string, nextUrl?: string | null) => {
+      const normalizedBrowserKey = nextBrowserKey.trim();
+      if (!normalizedBrowserKey) {
+        throw new Error("Browser surface rebind requires a readable browser key.");
+      }
+
+      browserKey = normalizedBrowserKey;
+      if (typeof nextUrl === "string" && nextUrl.trim().length > 0) {
+        await loadUrlLenient(browserView, nextUrl.trim());
+      }
+
+      recordRuntimeLog("info", "browser surface rebound", {
+        browser_key: browserKey,
+        current_url: toReadableRuntimeUrl(browserView.webContents.getURL()),
+      });
+
+      return getStateFromView(browserView, browserKey, browserCollapsed);
+    },
+    updateLayoutState: (nextLayoutState?: {
+      shell_split_ratio?: number | null;
+      browser_dock_position?: "left" | "right" | "top" | "bottom" | null;
+      browser_collapsed?: boolean | null;
+    }) => {
+      shellSplitRatio = normalizeShellSplitRatio(nextLayoutState?.shell_split_ratio);
+      browserDockPosition = normalizeBrowserDockPosition(
+        nextLayoutState?.browser_dock_position,
+      );
+      if (typeof nextLayoutState?.browser_collapsed === "boolean") {
+        browserCollapsed = nextLayoutState.browser_collapsed;
+      }
+      layout();
+      return getStateFromView(browserView, browserKey, browserCollapsed);
+    },
+    setHostBounds: (
+      nextBounds?: { x?: unknown; y?: unknown; width?: unknown; height?: unknown } | null,
+    ) => {
+      browserHostBounds = normalizeBrowserHostBounds(mainWindow, nextBounds);
+      layout();
+      return getStateFromView(browserView, browserKey, browserCollapsed);
+    },
     navigate: async (url: string) => {
-      await browserView.webContents.loadURL(url);
-      return getStateFromView(browserView);
+      await loadUrlLenient(browserView, url);
+      return getStateFromView(browserView, browserKey, browserCollapsed);
+    },
+    navigateBack: async () => {
+      if (!canNavigateBack(browserView.webContents)) {
+        throw new Error("Browser surface cannot go back from the current page.");
+      }
+
+      browserView.webContents.navigationHistory.goBack();
+      await waitForNavigationSettlement(browserView);
+      return getStateFromView(browserView, browserKey, browserCollapsed);
+    },
+    navigateForward: async () => {
+      if (!canNavigateForward(browserView.webContents)) {
+        throw new Error("Browser surface cannot go forward from the current page.");
+      }
+
+      browserView.webContents.navigationHistory.goForward();
+      await waitForNavigationSettlement(browserView);
+      return getStateFromView(browserView, browserKey, browserCollapsed);
+    },
+    reload: async () => {
+      browserView.webContents.reload();
+      await waitForNavigationSettlement(browserView);
+      return getStateFromView(browserView, browserKey, browserCollapsed);
     },
     click: async (selector: string) => {
       await waitForLoad(browserView);
@@ -224,23 +567,147 @@ export function createBrowserSurface(mainWindow: BrowserWindow) {
           };
         })();`,
         true,
-      )) as
-        | {
-            ok: true;
-            tag_name: string;
-            text: string;
-            rect: { x: number; y: number; width: number; height: number };
-            page_title: string;
-            page_url: string;
-          }
-        | {
-            ok: false;
-            reason: string;
-            tag_name?: string;
-            text?: string;
-          };
+      )) as BrowserClickResult | BrowserAutomationErrorResult;
 
       return clickResult;
+    },
+    fill: async (selector: string, value: string) => {
+      await waitForLoad(browserView);
+
+      const fillResult = (await browserView.webContents.executeJavaScript(
+        `(() => {
+          const selector = ${JSON.stringify(selector)};
+          const nextValue = ${JSON.stringify(value)};
+          const element = document.querySelector(selector);
+
+          if (!element) {
+            return { ok: false, reason: "ELEMENT_NOT_FOUND" };
+          }
+
+          const tagName = element.tagName;
+          const inputType = element instanceof HTMLInputElement ? element.type : null;
+          const unsupportedInputTypes = new Set([
+            "checkbox",
+            "radio",
+            "file",
+            "submit",
+            "button",
+            "reset",
+            "image",
+            "range",
+            "color",
+          ]);
+
+          const dispatchValueEvents = (target) => {
+            target.dispatchEvent(new Event("input", { bubbles: true }));
+            target.dispatchEvent(new Event("change", { bubbles: true }));
+          };
+
+          if (element instanceof HTMLInputElement) {
+            if (unsupportedInputTypes.has(element.type)) {
+              return {
+                ok: false,
+                reason: "FILL_UNSUPPORTED",
+                tag_name: tagName,
+                input_type: element.type,
+              };
+            }
+
+            const descriptor =
+              Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+            descriptor?.set?.call(element, nextValue);
+            element.focus();
+            dispatchValueEvents(element);
+
+            return {
+              ok: true,
+              tag_name: tagName,
+              input_type: element.type,
+              value_length: nextValue.length,
+              page_title: document.title,
+              page_url: window.location.href,
+            };
+          }
+
+          if (element instanceof HTMLTextAreaElement) {
+            const descriptor =
+              Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value");
+            descriptor?.set?.call(element, nextValue);
+            element.focus();
+            dispatchValueEvents(element);
+
+            return {
+              ok: true,
+              tag_name: tagName,
+              input_type: null,
+              value_length: nextValue.length,
+              page_title: document.title,
+              page_url: window.location.href,
+            };
+          }
+
+          if (element instanceof HTMLElement && element.isContentEditable) {
+            element.focus();
+            element.textContent = nextValue;
+            dispatchValueEvents(element);
+
+            return {
+              ok: true,
+              tag_name: tagName,
+              input_type: "contenteditable",
+              value_length: nextValue.length,
+              page_title: document.title,
+              page_url: window.location.href,
+            };
+          }
+
+          return {
+            ok: false,
+            reason: "FILL_UNSUPPORTED",
+            tag_name: tagName,
+            input_type: inputType,
+          };
+        })();`,
+        true,
+      )) as BrowserFillResult | BrowserAutomationErrorResult;
+
+      return fillResult;
+    },
+    extractText: async (selector?: string) => {
+      await waitForLoad(browserView);
+
+      const extractResult = (await browserView.webContents.executeJavaScript(
+        `(() => {
+          const requestedSelector = ${JSON.stringify(selector ?? "")}.trim();
+          const target = requestedSelector
+            ? document.querySelector(requestedSelector)
+            : document.body;
+
+          if (!target) {
+            return { ok: false, reason: "ELEMENT_NOT_FOUND" };
+          }
+
+          const rawText =
+            "innerText" in target
+              ? String(target.innerText || "")
+              : String(target.textContent || "");
+
+          const text = rawText.replace(/\\r\\n/g, "\\n").trim();
+
+          return {
+            ok: true,
+            selector: requestedSelector || "body",
+            tag_name: target instanceof HTMLElement ? target.tagName : "BODY",
+            text,
+            text_length: text.length,
+            page_title: document.title,
+            page_url: window.location.href,
+          };
+        })();`,
+        true,
+      )) as BrowserExtractTextResult | BrowserAutomationErrorResult;
+
+      return extractResult;
     },
   };
 }

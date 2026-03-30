@@ -1,0 +1,70 @@
+tab_key: tab-lab-01
+tab_name: Lab
+cli_profile_key: cli-global-default
+cli_overrides:
+  startup_directory: C:/MIDAS/code/clibase
+layout:
+  layout_key: layout-lab-01
+  layout_type: two-column
+  slots:
+    - slot_key: slot-browser-01
+      title: Browser
+      bounds:
+        x: 0
+        y: 0
+        w: 7
+        h: 12
+    - slot_key: slot-terminal-01
+      title: Terminal
+      bounds:
+        x: 7
+        y: 0
+        w: 5
+        h: 12
+modules:
+  - module_key: mod-browser-lab-01
+    module_type: browser
+    catalog_module_key: catalog-browser-standard
+    slot_key: slot-browser-01
+    module_name: Lab Browser
+    cli_profile_key: null
+    cli_overrides: null
+    settings:
+      browser_key: browser-surface-main
+      home_url: seed://clibase-lab-browser
+      session_key: sess-browser-lab-01
+    channel_refs:
+      inbound:
+        - browser.get-state
+        - browser.navigate
+        - browser.automation.click
+        - browser.capture-screenshot
+      outbound:
+        - browser.page.loaded
+        - browser.title.updated
+  - module_key: mod-terminal-lab-01
+    module_type: terminal
+    catalog_module_key: catalog-terminal-standard
+    slot_key: slot-terminal-01
+    module_name: Lab Shell
+    cli_profile_key: cli-global-default
+    cli_overrides: null
+    settings:
+      terminal_key: term-shell-lab-01
+      shell_profile_key: shell-pwsh-default
+      startup_path: C:/MIDAS/code/clibase
+      session_key: sess-terminal-lab-01
+      default_cols: 120
+      default_rows: 32
+      startup_commands: []
+    channel_refs:
+      inbound:
+        - terminal.create
+        - terminal.write
+        - terminal.resize
+        - terminal.kill
+        - terminal.logs.tail
+      outbound:
+        - terminal.output.chunk
+        - terminal.session.exited
+bindings: []

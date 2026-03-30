@@ -1,0 +1,267 @@
+version: 0.1.0
+
+contract_scope:
+  purpose: >
+    Define how project tabs are presented, how modules communicate within and
+    across tabs, and how tabs detach into separate windows for multi-monitor use.
+  status: draft-authoritative
+
+design_principles:
+  - the primary project tab surface is an ide-style top tab strip, not a sidebar
+  - project tabs are isolated by default and communicate only through explicit policies
+  - detached tabs remain part of the same project and same control plane
+  - multi-window behavior must preserve readable ownership and persistence keys
+  - do not rely on platform-native tabbing as the core product model
+
+ui_direction:
+  project_workspace_shell:
+    primary_tab_surface: top-tab-strip
+    secondary_navigation_surface: bottom-next-button
+    sidebar_role:
+      allowed:
+        - project switching
+        - project tree
+        - optional tool navigation
+      forbidden_as_primary_role:
+        - per-project main tab switching
+  tab_strip_rules:
+    - tabs are rendered horizontally like an ide editor/workbench strip
+    - active tab selection is the main navigation surface for runtime work
+    - tabs may be reordered within a project by drag-and-drop
+    - tabs may be dragged out to create a detached project window
+    - the strip should expose explicit insert-before and append drop affordances during drag
+  next_navigation_rules:
+    - a bottom next button may advance through the ordered project tab flow
+    - next navigation supplements tab strip navigation and does not replace it
+    - next target resolution must be readable from yaml, not inferred from hidden ui state
+
+must_have_tab_ux:
+  baseline_expectations:
+    - visible top tab strip with a clear active tab state
+    - click a tab to activate it
+    - keyboard or command-based next and previous tab navigation
+    - drag tabs to reorder them within the project
+    - drag a tab out to detach it into its own window
+    - drag a detached tab back onto the main strip or a valid drop target to re-dock it
+    - detached windows remain fully usable and keep the same tab identity
+    - split or secondary layout is allowed, but the top tab strip remains the canonical tab model
+    - browser, terminal, and logs stay bound to the active tab context
+    - tab activation must not silently discard running module state
+  forbidden_ux:
+    - sidebar-only tab navigation as the primary project tab model
+    - requiring a hidden button-only path to create or revisit common tab flows
+    - one-way detach where a tab can leave the main window but cannot be dragged back to re-dock
+    - losing module ownership or project policy when a tab becomes detached
+    - ad-hoc cross-tab communication with no explicit policy or binding record
+  product_interpretation:
+    - tab strip behavior should feel closer to an ide editor/workbench than a simple wizard pager
+    - bottom next navigation is a workflow helper layered on top of the tab strip, not the main tab model
+    - detached windows are a first-class multi-monitor workflow, not a debug-only mode
+
+tab_communication_model:
+  default_policy:
+    default_message_scope: tab-local-only
+    cross_tab_policy: deny
+  allowed_policies:
+    - policy_key: tab-local-only
+      meaning: modules may communicate only with modules in the same tab
+    - policy_key: project-explicit-bindings
+      meaning: modules may communicate across tabs only through named bindings
+  rules:
+    - browser, terminal, editor, ai, skill, and mcp modules never call each other directly
+    - all tab-local and cross-tab communication flows through the runtime host bus
+    - cross-tab traffic requires an explicit target tab_key or a reviewed binding preset
+    - hidden broadcast across all tabs is forbidden
+    - destructive automation may require an explicit target tab even when cross-tab policy allows bindings
+  example:
+    communication_policy:
+      default_message_scope: project-explicit
+      cross_tab_policy: allow-explicit-bindings
+      allowed_target_tab_keys:
+        - tab-review-02
+      allowed_binding_keys:
+        - bind-browser-main-to-review-terminal-01
+
+layout_and_canvas_model:
+  interaction_detail_document: 26-interaction-and-docking-foundation.yaml
+  layout_hosting:
+    - a project tab owns one layout definition
+    - a layout owns many slots
+    - a module instance attaches to one slot_key or remains unplaced
+  renderer_responsibility:
+    - render the tab strip
+    - render docked module canvas chrome
+    - show slot placeholders, inspectors, and next navigation
+  host_responsibility:
+    - create and place host-owned surfaces such as WebContentsView
+    - sync host-owned surface bounds to renderer layout slots
+    - move host-owned surfaces when a tab is detached or re-docked
+  rules:
+    - renderer state and host-owned surface placement must stay synchronized through readable project_key, tab_key, module_key ownership
+    - detaching a tab changes window ownership, not tab identity
+    - module_key, browser_key, and terminal_key stay stable when tabs move between windows
+    - per-window layout_state may change browser dock position without changing tab or module identity
+
+windowing_model:
+  canonical_window_types:
+    - window-main-project
+    - window-detached-tab
+  rules:
+    - one project may span multiple top-level windows
+    - each detached window is still project-owned and control-plane-managed
+    - detached windows must register readable window_key values
+    - window close behavior must be policy-driven: close-window-only, re-dock-tab, or confirm
+    - detached windows must reopen on the same or nearest available display when possible
+  draggable_tab_detach_flow:
+    - user drags a tab from the top tab strip
+    - renderer emits a named action for detach intent
+    - runtime host creates a new project-owned window
+    - runtime host moves the tab's layout ownership to the detached window record
+    - host-owned module surfaces are rebound to the new window
+    - audit and event logs record the detach action
+  redock_flow:
+    - user drags the detached tab back to a valid dock target or triggers a re-dock action
+    - runtime host reassigns window ownership to the main project window
+    - host-owned surfaces are rebound without changing module identity
+    - detached windows should also expose a direct return-to-main-workbench action
+
+multi_monitor_model:
+  required_capabilities:
+    - detect connected displays
+    - store preferred display placement per detached window
+    - restore to the same display when available
+    - fall back to the nearest available display when the original display disappears
+    - normalize stale or off-screen window bounds before the window is shown
+  placement_rules:
+    - display selection uses readable display records in volatile window placement state
+    - display movement is a window concern, not a module concern
+    - project yaml stores durable preference, while volatile state stores live bounds and active display choice
+    - move and resize events persist both display_key and bounds together
+  restore_normalization_rules:
+    - when display_key still matches a connected display, restore on that display first
+    - when display_key no longer matches, use the stored bounds to find the nearest connected display
+    - when neither a known display nor stored bounds can resolve a target, use the primary display
+    - clamp restored width and height to the target display work area
+    - shift restored x and y so the full window stays reachable inside the target display work area
+    - first boot or missing bounds should open centered within the target display work area
+
+storage_projection:
+  durable_preferences:
+    project_yaml:
+      optional_fields:
+        - tab_navigation_order
+        - default_windowing_policy_key
+    tab_yaml:
+      optional_fields:
+        - communication_policy
+        - navigation_policy
+        - window_policy
+  volatile_state:
+    views_yaml:
+      required_records:
+        - window_key
+        - project_key
+        - attached_tab_keys
+        - window_mode
+        - display_key
+        - bounds
+        - is_focused
+  example_views_record:
+    window_key: window-proj-clibase-main-main
+    project_key: proj-clibase-main
+    attached_tab_keys:
+      - tab-workbench-01
+    window_mode: docked-main-window
+    display_key: display-primary
+    bounds:
+      x: 40
+      y: 40
+      width: 1800
+      height: 1200
+    layout_state:
+      layout_preset_key: main_right_browser_v1
+      shell_split_ratio: 0.62
+      browser_dock_position: right
+      shell_stack_split_ratio: 0.32
+      browser_collapsed: false
+    is_focused: true
+
+electron_support_interpretation:
+  supported_by_electron:
+    - multiple top-level windows
+    - host-managed WebContentsView surfaces
+    - per-window bounds and movement
+    - display detection and display bounds lookup
+  not_provided_as_a_finished_product_pattern:
+    - cross-platform ide-style detachable tab strip
+    - project-aware tab-to-window ownership model
+    - automatic cross-tab communication policy system
+  product_decision:
+    - implement a custom top-tab-strip and detached-window manager in product code
+    - do not make macOS native tabbing the core architecture
+
+upstream_product_reference_notes:
+  vscode_like_patterns:
+    - editor tabs remain the main navigation surface even when floating windows exist
+    - dragging an editor out can create a floating window
+    - editor groups and panels may be rearranged without replacing the top editor-tab model
+  jetbrains_like_patterns:
+    - tabs can be detached into separate windows
+    - detached tabs can be dragged back or docked again
+    - split editing and tab movement complement the main editor-tab model
+  translation_for_clibase:
+    - project tabs should inherit these baseline expectations even though our tabs host modules rather than files
+    - detach, re-dock, reorder, and next-flow navigation must be deliberate product features rather than incidental side effects
+
+implementation_plan:
+  phase_1:
+    - add project-aware top tab strip to renderer
+    - add tab.activate and tab.next actions
+    - render layout from tab yaml instead of the current fixed workbench shell
+  phase_2:
+    - add tab.detach and tab.redock actions
+    - add window registry and window placement state
+    - support one detached tab window first
+  phase_3:
+    - support many detached windows per project
+    - support cross-tab explicit bindings with policy checks
+    - support multi-monitor restore and nearest-display fallback
+
+current_status:
+  already_prepared:
+    - readable project_key, tab_key, module_key ownership exists
+    - workspace yaml already stores tab yaml per project
+    - runtime registry already understands project/tab/module ownership
+    - browser and terminal actions already resolve through the shared control path
+    - durable logs already record project_key and tab_key scope
+    - renderer now exposes an ide-style top tab strip foundation for the active project
+    - tab.activate and tab.next are implemented in the shared runtime action path
+    - tab.previous is part of the project tab contract and the shared runtime action path
+    - the main project seed now contains more than one tab for workspace navigation smoke tests
+    - detached window foundation exists with tab.detach, tab.redock, and tab.reorder
+    - window views now persist layout_state.shell_split_ratio per window
+    - renderer exposes an explicit redock zone for detached tab return
+    - renderer exposes an explicit strip append drop affordance during tab drag
+    - renderer and runtime expose direct redock affordances for detached windows
+    - host browser surfaces now follow the same per-window shell split ratio as the renderer
+    - split handle reset is part of the first-class interaction model
+    - window placement persistence now stores display_key and bounds together
+    - detached window restore now prefers the same display and falls back to the nearest available display
+    - per-window browser dock position is part of the layout state contract
+    - renderer and host can now interpret browser dock targets through readable edge keys
+    - detached-tab redock now supports explicit center/left/right/top/bottom drop targets in the main window
+    - shell lane now supports a nested stack split with per-window shell_stack_split_ratio
+  not_yet_implemented:
+    - cross-tab communication policy enforcement
+    - drag-created pane groups and nested editor-like split trees
+    - multi-window restore polish across more complex window topologies such as many detached windows and nested pane groups
+
+references:
+  official:
+    - https://www.electronjs.org/docs/latest/api/browser-window
+    - https://www.electronjs.org/docs/latest/api/base-window
+    - https://www.electronjs.org/docs/latest/api/web-contents-view
+    - https://www.electronjs.org/docs/latest/api/screen
+    - https://code.visualstudio.com/docs/editor/custom-layout
+    - https://code.visualstudio.com/updates/v1_85
+    - https://www.jetbrains.com/help/idea/using-code-editor.html

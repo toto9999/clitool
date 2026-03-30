@@ -1,0 +1,13 @@
+default_project_key: proj-clibase-main
+project_order:
+  - proj-clibase-main
+  - proj-clibase-lab
+project_summaries:
+  - project_key: proj-clibase-main
+    project_name: CLIBase Main
+    icon_key: command
+    default_tab_key: tab-workbench-01
+  - project_key: proj-clibase-lab
+    project_name: CLIBase Lab
+    icon_key: flask-conical
+    default_tab_key: tab-lab-01

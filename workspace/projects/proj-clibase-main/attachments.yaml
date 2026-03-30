@@ -1,0 +1,18 @@
+project_key: proj-clibase-main
+enabled_skill_attachments: []
+enabled_mcp_attachments: []
+action_exposure_policy:
+  require_global_cli_projection: true
+  require_gui_projection: true
+  require_logging: true
+controller_defaults:
+  default_gui_actions:
+    - project.open
+    - project.save
+  default_cli_actions:
+    - project.open
+    - project.save
+  default_skill_targets:
+    - project
+  default_mcp_targets:
+    - project

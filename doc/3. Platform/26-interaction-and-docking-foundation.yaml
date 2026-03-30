@@ -1,0 +1,234 @@
+version: 0.1.0
+
+contract_scope:
+  purpose: >
+    Define the interaction model for project-aware layout, split-pane resizing,
+    detachable tabs, redock targets, focus movement, and restorable window/pane state.
+  status: draft-authoritative
+  related_documents:
+    - doc/3. Platform/27-ui-engineering-governance.yaml
+
+north_star:
+  statement: >
+    The workspace must feel like an IDE workbench, not a demo page with floating
+    widgets. Users should be able to move, resize, detach, redock, and restore
+    work surfaces without losing context or guessing hidden rules.
+
+interaction_principles:
+  - tab movement, pane movement, and window movement must be explicit and reversible
+  - direct manipulation should be preferred over hidden menu-only pathways
+  - every drag interaction needs an obvious valid drop target
+  - resize, detach, redock, and restore must preserve module identity
+  - the product must not rely on users remembering invisible layout state
+  - keyboard and CLI alternatives should exist for every stable pointer workflow
+
+must_have_ux:
+  tab_strip:
+    - visible active tab state
+    - reorder by drag
+    - detach by drag-out
+    - redock by drag-back
+    - visible append drop slot while a tab drag is active
+    - next and previous navigation
+    - command-based activate, reorder, detach, redock
+    - keyboard-based next and previous navigation
+  docking:
+    - a detached tab shows a valid redock affordance
+    - the main window exposes a clear redock target while a detached tab is being dragged
+    - detached windows provide a direct return action even when drag-back is inconvenient
+    - failed drops must snap back rather than silently losing context
+    - detach must not be one-way
+  split_layout:
+    - visible split handle
+    - drag to resize
+    - minimum pane widths
+    - double-click reset to default split
+    - persisted split ratio per window
+    - browser/terminal/module host surfaces follow the same split ratio
+  restore:
+    - restore top-level window bounds
+    - restore attached tabs per window
+    - restore active tab per window
+    - restore split ratio per window
+    - restore nearest available monitor when the original display is unavailable
+    - persist display_key together with bounds on move and resize
+    - clamp stale or off-screen restored bounds into the chosen monitor work area
+    - center windows on first boot or when no usable bounds exist
+  focus:
+    - active tab, active window, active browser target, and active terminal target remain readable
+    - pointer focus and command focus resolve to the same target identity
+    - detached window focus updates the active tab context without hidden retargeting
+
+forbidden_ux:
+  - hidden redock behavior with no visible drop target
+  - detached tabs that cannot be dragged back into the main window
+  - split resize that only changes renderer chrome while native browser surfaces ignore it
+  - tab reorder that changes visual order but not durable project order
+  - closing a detached window and losing tab ownership or layout state
+  - relying on sidebar-only navigation for project tabs
+  - introducing new-tab button flows as the primary answer to tab organization
+
+dock_model:
+  canonical_drop_targets:
+    - target_key: strip-insert-before-tab
+      meaning: insert the dragged tab before a visible tab in the main strip
+    - target_key: strip-append
+      meaning: append the dragged tab to the end of the main strip
+    - target_key: dock-overlay-primary
+      meaning: explicit large drop target for redocking detached tabs
+    - target_key: browser-dock-left
+      meaning: dock the host browser lane on the left edge of the current window
+    - target_key: browser-dock-right
+      meaning: dock the host browser lane on the right edge of the current window
+    - target_key: browser-dock-top
+      meaning: dock the host browser lane on the top edge of the current window
+    - target_key: browser-dock-bottom
+      meaning: dock the host browser lane on the bottom edge of the current window
+  detach_threshold:
+    rule: >
+      A docked tab drag that ends with no valid in-window drop target may detach,
+      but only when more than one docked tab remains in the main window.
+  redock_rules:
+    - redocking keeps the same tab_key
+    - redocking keeps the same module_key, browser_key, and terminal_key
+    - redocking updates window ownership only
+    - redocking should prefer the project's durable tab order when reinserting
+  reorder_rules:
+    - project tab order is canonical and durable
+    - detached tabs may be inserted at a chosen position during redock
+    - reorder feedback must be visible before drop commit
+
+split_layout_model:
+  current_foundation:
+    primary_shell_split:
+      meaning: left workbench shell lane and right host-browser lane
+      orientation: vertical
+      per_window_state_key: shell_split_ratio
+    shell_stack_split:
+      meaning: top summary lane and bottom terminal lane inside the shell
+      orientation: horizontal
+      per_window_state_key: shell_stack_split_ratio
+    browser_dock_position:
+      meaning: which edge of the window owns the host browser lane
+      allowed_values:
+        - right
+      per_window_state_key: browser_dock_position
+  defaults:
+    layout_preset_key: main_right_browser_v1
+    shell_split_ratio: 0.62
+    shell_stack_split_ratio: 0.32
+    min_left_ratio: 0.52
+    max_left_ratio: 0.74
+  behavior:
+    - current v1 canonical layout exposes only right-dock to avoid conflicting shell/browser arrangements while the core shell is being stabilized
+    - resizing updates renderer layout immediately
+    - resizing persists on commit
+    - resizing updates host-owned browser surface bounds through the main process
+    - host-owned browser surface must mount into a renderer-declared slot, not over the whole lane, so panel chrome and recovery controls stay visible
+    - reset returns to the documented default ratio
+    - changing browser dock position preserves the same active tab, browser target, and terminal target
+    - shell_split_ratio remains the shell lane share even when the browser lane moves to another edge
+  future_extensions:
+    - nested splits inside the workbench shell
+    - inspector collapse and restore
+    - editor group splits
+
+state_projection:
+  durable_project_yaml:
+    purpose: canonical project tab order and layout template intent
+  volatile_views_yaml:
+    per_window_fields:
+      - window_key
+      - attached_tab_keys
+      - active_tab_key
+      - display_key
+      - bounds
+      - layout_state.shell_split_ratio
+  rule:
+    - window placement and split ratio are window concerns
+    - module placement is tab layout concern
+    - active target resolution derives from active tab within the current window
+
+focus_and_command_model:
+  rules:
+    - activating a tab updates the current window's active_tab_key
+    - focusing a detached window promotes its active tab as the current context for that window
+    - terminal write actions resolve against the active terminal target of the current window
+    - browser actions resolve against the active browser target of the current window
+  command_equivalents:
+    - tab.activate
+    - tab.next
+    - tab.previous
+    - tab.detach
+    - tab.redock
+    - tab.reorder
+    - layout.window-state.update
+    - window.focus-target.sync
+    - browser-dock target selection through cli, gui, and future command palette
+
+implementation_requirements:
+  renderer:
+    - top tab strip remains the canonical visible tab surface
+    - split handle renders as a first-class affordance
+    - redock overlay becomes visible when a detached tab is dragged over the main window
+    - detached window surfaces show explicit return guidance
+    - browser dock target controls remain visible and readable
+  main_process:
+    - workspace store persists window layout_state
+    - host-owned browser surfaces consume the same split ratio used by the renderer
+    - window close on detached tabs defaults to redock-then-close unless explicitly overridden
+    - host-owned browser surfaces consume browser_dock_position from the same layout state
+  workspace_store:
+    - parse layout_state from views.yaml
+    - expose layout_state through workspace summary
+    - update layout_state through a narrow mutation path
+    - persist window placement through a narrow display_key plus bounds mutation path
+
+verification_targets:
+  - dragging the split handle changes renderer shell width and host browser bounds together
+  - double-clicking the split handle restores the default ratio
+  - dragging a docked tab out detaches it when at least one docked tab remains
+  - dragging a detached tab onto a redock target restores it to the main window
+  - closing a detached window redocks it instead of crashing or losing the tab
+  - restarting the app restores window bounds and shell split ratio
+  - restarting the app restores detached windows onto the same or nearest available display
+  - changing browser dock position reflows both renderer chrome and host browser bounds together
+
+current_status:
+  already_implemented:
+    - ide-style top tab strip
+    - tab.activate
+    - tab.next
+    - tab.previous
+    - tab.detach
+    - tab.redock
+    - tab.reorder
+    - detached window foundation
+    - detached-window close auto-redock
+    - explicit interaction contract for split resize and redock zones
+    - explicit strip append drop affordance during drag
+    - detached window return-to-main-workbench action
+    - keyboard-first next/previous tab cycling
+    - persisted shell split ratio per window
+    - native browser bounds following the same split ratio
+    - clearer redock affordance in the main window
+    - layout.window-state.update stable action for CLI-driven split state changes
+    - double-click split reset to the documented default ratio
+    - display-aware detached window placement persistence
+    - same-display restore with nearest-display fallback and off-screen bounds normalization
+    - per-window browser dock target foundation through readable edge keys
+    - detached-tab redock drop zone now exposes center/left/right/top/bottom edge targets
+    - dropping a detached tab onto an edge redocks the tab and applies that browser dock position in one flow
+    - nested shell-stack split foundation with per-window shell_stack_split_ratio persistence
+  later_extensions:
+    - nested pane groups
+    - keyboard-first pane movement
+    - per-tab panel presets
+
+references:
+  official:
+    - https://code.visualstudio.com/docs/editor/custom-layout
+    - https://code.visualstudio.com/updates/v1_85
+    - https://www.jetbrains.com/help/idea/using-code-editor.html
+    - https://www.electronjs.org/docs/latest/api/browser-window
+    - https://www.electronjs.org/docs/latest/api/screen

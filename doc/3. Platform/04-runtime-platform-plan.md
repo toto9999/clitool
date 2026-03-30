@@ -63,7 +63,7 @@
 ### 2. Runtime Host
 
 - 기술: `Electron Main + Preload`
-- 역할: 창 생성, view 배치, IPC 라우팅, 권한 정책, 세션 정책
+- 역할: 창 생성, view 배치, IPC 라우팅, 권한 정책, 세션 정책, multi-window orchestration
 
 ### 3. Terminal Service
 
@@ -147,6 +147,7 @@
 
 - `WebContentsView` 기반 browser module PoC
 - 프로젝트 탭/모듈 슬롯과 native view bounds 동기화
+- IDE형 상단 탭 스트립과 detached window 사이에서 browser surface ownership 이동
 - session partition 정책
 - 주소 이동, 뒤로가기, 새창, 다운로드, 권한 요청 정책
 - 외부 로그인 페이지나 복잡한 사이트 대응 범위 정의
@@ -169,6 +170,7 @@
 - 프로젝트/탭/모듈/레이아웃 저장 포맷 정의
 - 런타임 module instance와 persisted config 매핑
 - 브라우저/터미널 세션의 복원 전략 정의
+- 탭의 docked/detached 상태, window ownership, display placement 저장 전략 정의
 
 ## G. 운영 기반
 
@@ -215,12 +217,13 @@
   - `electron/main/main.cts`: BrowserWindow 생성과 dev/prod 로드 경로 결정
   - `electron/preload/preload.cts`: renderer에 최소 bridge API 노출
   - `tsconfig.electron.json`: Electron entry compile 경계
+  - `scripts/run-electron-dev.cjs`: renderer dev port와 fresh electron compile 산출물을 함께 기다린 뒤 desktop shell 실행
   - `scripts/launch-electron-dev.cjs`: Codex/Windows 환경의 `ELECTRON_RUN_AS_NODE` shadowing을 제거하고 Electron 바이너리를 실행
   - `src/app/App.tsx`: desktop shell 연결 상태를 보여 주는 최소 renderer surface
 - 1차 스크립트 경계:
-  - `npm run dev`: renderer dev server와 electron entry compile, desktop shell 실행을 함께 수행
-  - `npm run build`: renderer build와 electron compile을 함께 수행
-  - `npm run typecheck`: renderer + electron 타입 검사를 함께 수행
+  - `batcli dev`: renderer dev server와 electron entry compile, desktop shell 실행을 함께 수행
+  - `batcli build`: renderer build와 electron compile을 함께 수행
+  - `batcli typecheck`: renderer + electron 타입 검사를 함께 수행
 - 성공 기준: 데스크톱 셸 안에서 현재 UI가 뜬다.
 - 추가 성공 기준:
   - preload bridge를 통해 renderer가 `desktop-shell connected` 상태를 확인한다
@@ -230,6 +233,10 @@
 
 - `xterm.js + node-pty`로 단일 터미널 세션을 띄운다.
 - 성공 기준: 입력/출력/resize가 된다.
+- 현재 코드 기준으로 host-owned `node-pty` backend와 renderer-side xterm surface는 이미 들어가 있으며, 다음 단계는 project-aware layout과 module canvas 통합이다.
+- renderer 연결 경계:
+  - preload bridge가 active terminal state와 terminal.write/resize/log-tail 호출을 renderer에 노출
+  - renderer는 xterm surface를 통해 PTY output을 표시하고 입력을 다시 terminal.write로 전달
 
 ### Step 3. Browser PoC
 
@@ -253,6 +260,13 @@
 ### Step 5. Module Bus PoC
 
 - 터미널/브라우저/앱 간 최소 이벤트 한두 개를 연결한다.
+
+## Electron Windowing 해석
+
+- Electron은 여러 `BrowserWindow` 또는 `BaseWindow`를 만들 수 있으므로, 프로젝트 탭을 별도 top-level window로 분리하는 기반은 제공한다.
+- Electron의 `screen` API로 연결된 디스플레이 목록과 bounds를 읽을 수 있으므로 멀티모니터 배치 복원도 가능하다.
+- 다만 IDE처럼 탭을 드래그해서 새 창으로 분리하는 경험은 Electron이 cross-platform으로 완성품을 주지 않는다. 제품 코드에서 custom tab strip, drag threshold, detach/drop, window ownership을 직접 구현해야 한다.
+- `BrowserWindow`의 native tab 관련 API는 macOS 중심 기능이므로 제품의 주 탭 모델로 채택하지 않는다.
 - 예시:
   - 앱이 터미널에 명령 전송
   - 브라우저 현재 URL을 앱 상태에 반영
@@ -261,10 +275,15 @@
 ### Step 6. Workspace Integration
 
 - 프로젝트 탭 레이아웃과 terminal/browser module 인스턴스를 연결한다.
+- 첫 구현은 `workspace/app.yaml`, `workspace/projects-index.yaml`, `workspace/projects/<project_key>/project.yaml`, `workspace/projects/<project_key>/tabs/<tab_key>.yaml`를 자동 bootstrap/load 하는 host-owned loader로 시작한다.
+- browser와 이후 terminal surface는 runtime registry에 등록되어 project/tab/module ownership과 함께 조회 가능해야 한다.
+- 최소 bootstrap action:
+  - `workspace.get-state`
+  - registry-backed `browser.get-state`
 
 ## 지금 당장 문서 기준으로 막아야 할 착각
 
-- 현재 `npm run dev`로 뜨는 React 앱만 완성해도 제품 요구가 충족되는 것은 아니다.
+- 현재 `batcli dev`로 뜨는 React 앱만 완성해도 제품 요구가 충족되는 것은 아니다.
 - browser module을 단순 `iframe`으로 생각하면 안 된다.
 - `어느 사이트나 100% 문제 없이`를 목표 문구로 쓰면 안 된다.
 - terminal module을 “터미널처럼 보이는 UI”로만 구현하면 안 된다.

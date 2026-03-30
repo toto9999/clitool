@@ -210,9 +210,15 @@ action_catalog_model:
     action_name_pattern: "<domain>.<verb>"
     examples:
       - project.open
+      - project.switch
       - project.save
       - tab.activate
       - module.command
+      - terminal.create
+      - terminal.write
+      - terminal.resize
+      - terminal.kill
+      - terminal.logs.tail
       - skill.run
       - mcp.tool.call
       - log.analysis.refresh
@@ -289,7 +295,7 @@ controller_projection_policy:
     rules:
       - every stable action must be invokable from global cli with explicit scope arguments
       - cli help must be generated from the same action catalog, not hand-maintained duplicates
-      - the first runtime-host actions exposed from batcli are app.ping, app.logs.tail, browser.get-state, browser.navigate, browser.automation.click, and browser.capture-screenshot
+      - the first runtime-host actions exposed from batcli are app.ping, app.logs.tail, workspace.get-state, project.open, project.switch, tab.activate, tab.next, tab.detach, tab.redock, tab.reorder, layout.window-state.update, browser.get-state, browser.navigate, browser.navigate.back, browser.navigate.forward, browser.navigate.reload, browser.automation.click, browser.automation.fill, browser.automation.extract-text, browser.capture-screenshot, terminal.create, terminal.write, terminal.resize, terminal.kill, terminal.logs.tail, terminal.get-state, uia.registry.get, uia.adapter.update, uia.target.save, uia.target.launch, uia.target.stop, uia.target.state, uia.macro.save, uia.macro.list, uia.macro.delete, uia.macro.run, uia.recording.start, uia.recording.stop, and uia.recording.state
   project_cli_projection:
     rules:
       - project cli invokes the same action catalog with implicit project defaults
@@ -342,7 +348,7 @@ observability_model:
     - policy decisions, config mutations, replay runs, and security-relevant outcomes must appear in audit-log
     - log omission for stable actions is treated as a contract violation
     - event normalization for silent or text-only packages must follow 08-external-module-runtime.yaml
-    - before durable yaml buckets are implemented, the initial runtime-host skeleton may keep a bounded in-memory log, but the action names and response shapes must already match the control-plane vocabulary
+    - the initial runtime-host skeleton persists durable yaml action, event, and audit buckets under workspace/logs while still keeping a bounded in-memory runtime log for operator-facing tail views
 
 action_log_contract:
   record_types:

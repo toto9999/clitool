@@ -1,6 +1,10 @@
+__pycache__/
+*.py[cod]
 node_modules/
 dist/
 dist-electron/
 .vite/
 .clibase/
+workspace-state/
+workspace/logs/
 *.log

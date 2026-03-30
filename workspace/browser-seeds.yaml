@@ -1,0 +1,13 @@
+seeds:
+  - seed_url_key: seed://clibase-main-browser
+    title: CLIBase Main Browser
+    body_label: Main project browser target.
+    button_label: Commit main page state
+  - seed_url_key: seed://clibase-review-browser
+    title: CLIBase Review Browser
+    body_label: Review tab browser target.
+    button_label: Commit review page state
+  - seed_url_key: seed://clibase-lab-browser
+    title: CLIBase Lab Browser
+    body_label: Lab project browser target.
+    button_label: Commit lab page state

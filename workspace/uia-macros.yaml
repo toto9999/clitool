@@ -1,6 +1,6 @@
 version: 1
 uia_adapter:
-  provider_key: flaui_python
+  provider_key: uiapeek
   executable_path: ""
   python_executable: ""
   default_timeout_ms: 4500
@@ -21,10 +21,5 @@ targets:
     working_dir: ""
     startup_wait_ms: 1200
     created_at: 2026-03-30T01:52:02.253Z
-    updated_at: 2026-03-30T08:50:32.162Z
-    host_reference_frame:
-      width_px: 1280
-      height_px: 720
-      coordinate_space: host_reference
-      placement_mode: external_os_window
+    updated_at: 2026-03-30T01:52:02.253Z
 macros: []

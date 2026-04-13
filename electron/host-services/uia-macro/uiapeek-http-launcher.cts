@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import http from "node:http";
 import fs from "node:fs";
+import path from "node:path";
 import { recordRuntimeLog } from "../runtime-control/runtime-logging.cjs";
 
 let spawnedHostProcess: ChildProcess | null = null;
@@ -18,6 +19,29 @@ function httpProbeHost(hostname: string): string {
     return "127.0.0.1";
   }
   return hostname;
+}
+
+function spawnEnvForUiaPeekHost(): NodeJS.ProcessEnv {
+  const env = { ...process.env } as NodeJS.ProcessEnv;
+  const workspaceDir =
+    process.env.CLIBASE_UIAPEEK_DOTNET_DIR?.trim() ||
+    path.join(process.cwd(), ".clibase", "dotnet");
+  const localDir = path.join(process.env.LOCALAPPDATA ?? "", "Microsoft", "dotnet");
+  const progDir = path.join(process.env.ProgramFiles ?? "", "dotnet");
+  if (fs.existsSync(path.join(workspaceDir, "dotnet.exe"))) {
+    env.PATH = `${workspaceDir}${path.delimiter}${env.PATH ?? ""}`;
+    if (!env.DOTNET_ROOT) {
+      env.DOTNET_ROOT = workspaceDir;
+    }
+  } else if (fs.existsSync(path.join(localDir, "dotnet.exe"))) {
+    env.PATH = `${localDir}${path.delimiter}${env.PATH ?? ""}`;
+    if (!env.DOTNET_ROOT) {
+      env.DOTNET_ROOT = localDir;
+    }
+  } else if (fs.existsSync(path.join(progDir, "dotnet.exe")) && !env.DOTNET_ROOT) {
+    env.DOTNET_ROOT = progDir;
+  }
+  return env;
 }
 
 function parseHttpWaitMs(): number {
@@ -97,21 +121,21 @@ export async function ensureUiaPeekHttpServer(options: {
     value: { code: number | null; signal: NodeJS.Signals | null } | null;
   } = { value: null };
 
-  spawnedHostProcess = spawn(options.hostExePath, [], {
+  const exePath = options.hostExePath;
+  const workDir = path.dirname(exePath);
+  const exeAbs = path.resolve(exePath);
+  const env = spawnEnvForUiaPeekHost();
+  const comspec =
+    process.env.ComSpec ?? path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "cmd.exe");
+
+  /** cmd START: first arg is window title — use "" then /D and exe (see uia-peek-start.mjs). */
+  spawnedHostProcess = spawn(comspec, ["/c", "start", "", "/D", workDir, exeAbs], {
     detached: true,
     stdio: "ignore",
     windowsHide: false,
+    env,
   });
   hostSpawnedByClibase = true;
-
-  spawnedHostProcess.on("exit", (code, signal) => {
-    hostExitRef.value = { code, signal };
-    recordRuntimeLog("warn", "uiapeek http: spawned UiaPeek.exe exited", {
-      code,
-      signal,
-      exe: options.hostExePath,
-    });
-  });
 
   spawnedHostProcess.unref();
 
@@ -136,7 +160,7 @@ export async function ensureUiaPeekHttpServer(options: {
     if (hostExitRef.value) {
       const ex = hostExitRef.value;
       throw new Error(
-        `UiaPeek.exe exited before HTTP came up (code ${ex.code}, signal ${ex.signal ?? "none"}). Try running ${options.hostExePath} manually, another port, or Administrator. Hub URL: ${options.hubUrl}`,
+        `UiaPeek.exe exited before HTTP came up (code ${ex.code}, signal ${ex.signal ?? "none"}). Run batcli install or batcli uia-peek install-runtime to provision .clibase/dotnet, then retry. You can also try running ${options.hostExePath} manually, another port, or Administrator. Hub URL: ${options.hubUrl}`,
       );
     }
     poll += 1;
@@ -148,7 +172,7 @@ export async function ensureUiaPeekHttpServer(options: {
   }
 
   throw new Error(
-    `Timed out after ${waitMs}ms waiting for UiaPeek HTTP at http://${httpProbeHost(hostname)}:${port}/api/v4/g4/ping. Install or run UiaPeek manually, set CLIBASE_UIAPEEK_HOST_EXE, increase CLIBASE_UIAPEEK_HTTP_WAIT_MS, or start as Administrator if hooks block startup. Hub: ${options.hubUrl}`,
+    `Timed out after ${waitMs}ms waiting for UiaPeek HTTP at http://${httpProbeHost(hostname)}:${port}/api/v4/g4/ping. Run batcli install or batcli uia-peek install-runtime to provision .clibase/dotnet, install or run UiaPeek manually, set CLIBASE_UIAPEEK_HOST_EXE, increase CLIBASE_UIAPEEK_HTTP_WAIT_MS, or start as Administrator if hooks block startup. Hub: ${options.hubUrl}`,
   );
 }
 

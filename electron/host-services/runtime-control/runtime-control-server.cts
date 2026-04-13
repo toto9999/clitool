@@ -11,6 +11,7 @@ import {
 import type { createRuntimeRegistry } from "../runtime-registry/runtime-registry.cjs";
 import type { createTerminalService } from "../terminal/terminal-service.cjs";
 import type { createUiaMacroService, UiaHostReferenceFrame } from "../uia-macro/uia-macro-service.cjs";
+import { recordingPayloadsToMacroSteps } from "../uia-macro/recording-payloads-to-macro-steps.cjs";
 import type { createUiapeekRecordingBridge } from "../uia-macro/uiapeek-recording-bridge.cjs";
 import type { createWorkspaceStore } from "../workspace/workspace-store.cjs";
 import { getRuntimeLogsTail, recordRuntimeLog } from "./runtime-logging.cjs";
@@ -58,6 +59,8 @@ interface RuntimeControlServerOptions {
   ensureUiapeekRecordingBridge: () => Promise<
     ReturnType<typeof createUiapeekRecordingBridge>
   >;
+  getUiaRecordingPayloadBuffer: () => unknown[];
+  clearUiaRecordingPayloadBuffer: () => void;
   defaultUiapeekHubUrl: string;
   syncPrimaryBrowserSurface?: () => Promise<void>;
 }
@@ -1809,6 +1812,11 @@ async function handleRuntimeAction(
     );
 
     const hostReferenceFrame = getHostReferenceFramePayload(payload);
+    const uiaWindowTitle = getStringPayload(
+      payload,
+      "uia_window_title",
+      "uia-window-title",
+    );
 
     try {
       return respondSuccess(
@@ -1820,6 +1828,7 @@ async function handleRuntimeAction(
           working_dir: workingDir,
           startup_wait_ms: startupWaitMs,
           host_reference_frame: hostReferenceFrame,
+          ...(uiaWindowTitle ? { uia_window_title: uiaWindowTitle } : {}),
         }),
       );
     } catch (error) {
@@ -2080,6 +2089,7 @@ async function handleRuntimeAction(
   }
 
   if (actionName === "uia.recording.start") {
+    options.clearUiaRecordingPayloadBuffer();
     const bridge = await options.ensureUiapeekRecordingBridge();
     try {
       return respondSuccess(await bridge.start());
@@ -2128,6 +2138,88 @@ async function handleRuntimeAction(
     } catch (error) {
       return respondError(
         "UIA_RECORDING_STATE_FAILED",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  if (actionName === "uia.recording.events.export") {
+    const payloads = options.getUiaRecordingPayloadBuffer();
+    return respondSuccess({
+      count: payloads.length,
+      payloads,
+    });
+  }
+
+  if (actionName === "uia.recording.session.save_macro") {
+    const uiaMacroService = options.getUiaMacroService();
+    if (!uiaMacroService) {
+      return respondError(
+        "UIA_SERVICE_NOT_READY",
+        "The UIA macro service is not ready yet.",
+      );
+    }
+
+    const macroKey = getStringPayload(payload, "macro_key", "macro-key");
+    const targetKey = getStringPayload(payload, "target_key", "target-key");
+    if (!macroKey) {
+      return respondError(
+        "INVALID_MACRO_KEY",
+        "The uia.recording.session.save_macro action requires a --macro_key value.",
+      );
+    }
+    if (!targetKey) {
+      return respondError(
+        "INVALID_TARGET_KEY",
+        "The uia.recording.session.save_macro action requires a --target_key value.",
+      );
+    }
+
+    const mergedFieldRaw = getStringPayload(
+      payload,
+      "merged_field_action",
+      "merged-field-action",
+    )
+      .trim()
+      .toLowerCase();
+    const mergedFieldAction =
+      mergedFieldRaw === "type" ? "type" : ("set_text" as const);
+
+    const rawPayloads = options.getUiaRecordingPayloadBuffer();
+    const steps = recordingPayloadsToMacroSteps(rawPayloads, {
+      mergedFieldAction,
+    });
+
+    if (!steps.length) {
+      return respondError(
+        "UIA_RECORDING_NO_STEPS",
+        "No flaui steps were derived from the recording buffer. Interact with the target during recording or increase wait time.",
+      );
+    }
+
+    const macroName = getStringPayload(payload, "macro_name", "macro-name");
+    const description = getStringPayload(payload, "description");
+    const sharedTags = getStringArrayPayload(
+      payload,
+      "shared_tags",
+      "shared-tags",
+      "tags",
+    );
+
+    try {
+      return respondSuccess(
+        uiaMacroService.saveMacro({
+          macro_key: macroKey,
+          macro_name: macroName,
+          target_key: targetKey,
+          description,
+          shared_tags: sharedTags,
+          steps,
+        }),
+      );
+    } catch (error) {
+      return respondError(
+        "UIA_RECORDING_SAVE_MACRO_FAILED",
         error instanceof Error ? error.message : String(error),
       );
     }

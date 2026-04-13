@@ -89,6 +89,11 @@ global_cli_uia_executor_bootstrap:
   script_path_note: >
     run_step.py resolves from the application repo root (not workspace/), so the host passes
     repoRoot separately from workspace data paths.
+  run_step_read_text_note: >
+    For flaui.get_text, flaui.read_text, and flaui.get_value, run_step prefers UIA ValuePattern
+    CurrentValue when available (many display Edit controls expose the shown digits only there;
+    window_text may be empty or an app name). If ValuePattern is missing or empty, it falls back
+    to window_text. The step value field, when non-empty, is an exact expected string; mismatch fails the step.
 
 uiapeek_vendor_bootstrap:
   purpose: >
@@ -99,6 +104,7 @@ uiapeek_vendor_bootstrap:
     bundled_with_install: batcli install
     skip_flag: batcli install --no-uia-peek
     standalone: batcli uia-peek download [--force]
+  http_ping_cli: batcli uia-peek ping
   destination: vendor/uia-peek/UiaPeek.exe
   temp_extract_root: .clibase/uia-peek-dl
 
@@ -109,6 +115,23 @@ design_principles:
   - macro execution and results must be loggable and replay-addressable
   - the top verification lane and bottom terminal lane are one workflow surface
   - provider-specific adapter details must not leak into action naming
+
+guest_runtime_verification_scope:
+  purpose: >
+    Desktop UIA verification has two layers: static/repo gates vs guest runtime.
+    VM availability, interactive display session, and GenNX actually running
+    are in scope whenever the operator or release process claims GEN or guest
+    EXE behavior—not when only batcli verify passes.
+  authoritative_tier_doc: doc/3. Platform/23-verification-and-release-gates.yaml
+  tier_keys:
+    repo_static: batcli verify class (docs, typecheck, build)
+    gennx_guest_runtime: VM or equivalent host, screen session, GenNX exe live, FlaUI/UiaPeek path as required by the scenario
+  operator_rule: >
+    Do not equate `batcli verify` with GEN 동작 검증. Use tier gennx_guest_runtime
+    checks: e.g. `batcli vm gennx verify-guest` from the Hyper-V host (WinRM into guest)
+    when the lab is wired for it, or `batcli uia gennx verify` inside an interactive
+    guest session (RDP/vmconnect) when FlaUI needs the visible desktop. WinRM alone may
+    not attach to the interactive session; see scripts/vm-gennx-verify-guest.ps1 header.
 
 verification_lane_model:
   ui_surface:
@@ -238,6 +261,8 @@ action_catalog:
     - uia.recording.start
     - uia.recording.stop
     - uia.recording.state
+    - uia.recording.events.export
+    - uia.recording.session.save_macro
   rules:
     - all actions are callable from batcli action run
     - gui controls dispatch these same names
@@ -316,8 +341,10 @@ implementation_status:
   host_runtime:
     - IPC bridge and runtime actions are wired in main/preload/runtime-control
     - `clibase:uia:runtime-status` aggregates host registry running_targets, recording bridge state, and `uiapeek_http_ping_ok` (GET /api/v4/g4/ping) so the UI can separate HTTP reachability from SignalR Disconnected idle
+    - `clibase:uia:http-ping` returns `{ ok, hub_url }` for the default hub when full runtime-status is unavailable (older preload) so Verification can still show HTTP reachability
     - `workspace/uia-macros.yaml` persists target and macro contracts
     - `scripts/ensure-uiapeek.mjs` plus `batcli uia-peek download` / optional `batcli install` step place vendor/uia-peek/UiaPeek.exe for offline-first resolution
+    - `scripts/ensure-dotnet-aspnetcore-runtime.mjs` makes `.clibase/dotnet` the preferred local runtime home for `Microsoft.AspNetCore.App` + `Microsoft.WindowsDesktop.App` so UiaPeek startup does not depend on machine-global .NET
     - `electron/host-services/uia-macro/uiapeek-http-launcher.cts` starts UiaPeek.exe when localhost hub is down before SignalR connect
     - `electron/host-services/uia-macro/uiapeek-recording-bridge.cts` connects SignalR to
       verification UI and batcli `uia.recording.*` actions
@@ -326,12 +353,142 @@ implementation_status:
   notes:
     - CLI multiline payload quoting can be fragile on Windows; `steps_file` input is supported for reliable macro save
     - uia.target.save accepts optional host_reference_frame object or flat host_reference_width_px and host_reference_height_px
+    - uia.target.save accepts optional uia_window_title (pywinauto title_re) so FlaUI macro steps attach via window search when spawn PID is not the UI-owning process
+    - `batcli smoke verification` bootstraps uia-executor venv, workspace-local `.clibase/dotnet`, UiaPeek vendor zip, and detached Electron when `app.ping` is unreachable; use `--skip-bootstrap` when `batcli dev` is already running
+    - when UiaPeek HTTP startup fails because .NET is missing, CLI/runtime guidance must point operators to `batcli install` or `batcli uia-peek install-runtime`
+    - visible VM guest product launch and inspection should use `batcli vm guest app ...` as the operator contract; old `batcli vm gennx ...` names remain compatibility aliases only
+    - the explicit GenNX visible repro path should remain callable as `batcli vm guest diagnose-gennx-new-project` instead of requiring operators to invoke the underlying PowerShell diagnostic script directly
+
+vm_guest_app_contract:
+  summary: >
+    Visible guest-product launch and inspection should be standardized under
+    `batcli vm guest app ...` instead of one-off script names. The first-class
+    app key is currently `gennx`.
+  commands:
+    launch_visible: >
+      `batcli vm guest app launch-visible --app gennx --vm_profile_key vm-...`
+      launches the guest EXE in the logged-in interactive session and writes
+      attestation artifacts under `.clibase/artifacts`. Add
+      `--no-auto-elevate` when operators want a fail-fast permission error
+      instead of a UAC relaunch attempt. Interactive launch should ensure the
+      profiled visible guest session first unless explicitly skipped.
+    capture_visible: >
+      `batcli vm guest app capture-visible --app gennx --vm_profile_key vm-...`
+      captures the current visible guest desktop through the same interactive
+      user session. Add `--no-auto-elevate` to return an immediate Hyper-V
+      permission error when the host shell is not elevated.
+    verify_runtime: >
+      `batcli vm guest app verify-runtime --app gennx --vm_profile_key vm-...`
+      keeps the guest runtime verification path behind the same namespace and
+      also accepts `--no-auto-elevate` for deterministic fail-fast behavior.
+    resolve_config: >
+      `batcli vm guest app resolve-config --app gennx --vm_profile_key vm-...`
+      prints the resolved guest EXE / process / window-title contract before
+      launch so operators can inspect configuration without opening scripts.
+    diagnose_new_project: >
+      `batcli vm guest diagnose-gennx-new-project --vm_profile_key vm-...`
+      remains the explicit visible repro command for the GenNX `left menu -> New Project`
+      failure path and collects screenshot / `NEW*.tmp` / WebView hints to `.clibase/artifacts`.
+      When Hyper-V host rights are unavailable but `guest_winrm_host` is profiled
+      and reachable, it should prefer the WinRM-only visible-session fallback
+      instead of forcing extra UAC prompts.
+
+vm_guest_session_contract:
+  summary: >
+    Visible guest-session login must also be a first-class `batcli` contract so
+    operators do not need to manually log on through `vmconnect` before visible
+    launch commands.
+  commands:
+    status: >
+      `batcli vm guest session status --vm_profile_key vm-...`
+      reports the profiled guest visible-session state, explorer shell presence,
+      and current AutoAdminLogon registry baseline through WinRM or PowerShell Direct.
+    ensure_visible: >
+      `batcli vm guest session ensure-visible --vm_profile_key vm-...`
+      ensures the profiled guest user is logged on to the visible desktop. If
+      no visible session exists, it should configure AutoAdminLogon with the
+      profiled guest credentials, restart the guest, wait for remoting to
+      return, and verify the explorer shell for that user.
+  profile_fields:
+    - `guest_local_user`
+    - `guest_local_password`
+    - `guest_winrm_host`
+    - `hyper_v_vm_name`
+  notes:
+    - Windows operators should invoke `batcli ...` directly; `batcli.cmd` is the CLI entrypoint on this host
+    - `launch-visible` should call `ensure-visible` automatically for interactive mode unless `--skip-ensure-session` is supplied
+    - AutoAdminLogon is a lab-only convenience and stores the guest password on the VM, so the contract must stay explicit in docs and CLI help
+    - When Hyper-V cmdlets are unavailable in the current shell but `guest_winrm_host` is profiled and reachable, guest session automation should fall back to WinRM-only control instead of forcing extra UAC prompts
+
+vm_hyperv_network_contract:
+  summary: >
+    Hyper-V visible-session recovery should also be standardized under `batcli`
+    so operators can bring the VM back after reboot without reaching for hidden
+    one-off scripts.
+  commands:
+    ensure_running: >
+      `batcli vm hyperv ensure-running --vm_profile_key vm-...` ensures the
+      Hyper-V VM reaches the `Running` state before guest remoting or visible
+      launch steps.
+    connect: >
+      `batcli vm hyperv connect --vm_profile_key vm-...` opens `vmconnect.exe`
+      for the profiled VM name.
+    guest_ip: >
+      `batcli vm hyperv guest-ip --vm_profile_key vm-...` resolves Hyper-V
+      guest-reported IP addresses for the profiled VM.
+    network_diagnose: >
+      `batcli vm network diagnose --vm_profile_key vm-...` checks the host
+      Internal+NAT topology, profiled guest IP reachability, and WinRM/SMB
+      ports without mutating state.
+    network_repair: >
+      `batcli vm network repair --vm_profile_key vm-...` repairs the profiled
+      host Internal switch + NAT, reconnects the profiled VM adapter, reapplies
+      the guest static IPv4/WinRM/firewall baseline, and re-runs diagnostics.
+  profile_fields:
+    - `hyper_v_vm_name`
+    - `guest_winrm_host`
+    - `hyperv_switch_name`
+    - `hyperv_host_gateway_ipv4`
+    - `hyperv_guest_ipv4`
+    - `hyperv_subnet_prefix`
+    - `hyperv_nat_name`
+    - `guest_local_user`
+    - `guest_local_password`
+  notes:
+    - `ensure-running`, `connect`, `guest-ip`, and `network repair` may require Hyper-V administrator rights
+    - these commands should accept `--no-auto-elevate` so automation can fail fast instead of waiting on a UAC prompt
+    - `network repair` is the preferred recovery path when the VM loses internet access after reboot and `guest_winrm_host` no longer responds
+    - when operators invoke `batcli` on Windows, root `batcli.cmd` should own one-shot elevation so nested VM helpers do not keep prompting with separate UAC dialogs or expose `node.exe` as the operator surface
 
 batcli_examples:
+  - batcli uia-peek ping
   - batcli uia-peek download
+  - batcli uia-peek install-runtime
+  - batcli smoke verification
+  - batcli smoke verification --static-only
+  - batcli smoke verification --record-wait-ms 12000
+  - batcli uia-test-host build
+  - batcli smoke verification --cli-auto
+  - node scripts/uia-verification-smoke.mjs --calculator-doc --record-wait-ms 2000
+  - batcli smoke verification --skip-bootstrap
+  - batcli vm guest app resolve-config --app gennx --vm_profile_key vm-gennx-01
+  - batcli vm guest app launch-visible --app gennx --vm_profile_key vm-gennx-01 --no-auto-elevate
+  - batcli vm guest app capture-visible --app gennx --vm_profile_key vm-gennx-01 --no-auto-elevate
+  - batcli vm guest app verify-runtime --app gennx --vm_profile_key vm-gennx-01 --no-auto-elevate
+  - batcli vm guest session status --vm_profile_key vm-gennx-lab
+  - batcli vm guest session ensure-visible --vm_profile_key vm-gennx-lab
+  - batcli vm guest diagnose-gennx-new-project --vm_profile_key vm-gennx-01
+  - batcli vm hyperv ensure-running --vm_profile_key vm-gennx-lab
+  - batcli vm hyperv connect --vm_profile_key vm-gennx-lab
+  - batcli vm hyperv guest-ip --vm_profile_key vm-gennx-lab
+  - batcli vm network diagnose --vm_profile_key vm-gennx-lab
+  - batcli vm network repair --vm_profile_key vm-gennx-lab
+  - batcli action run --action uia.recording.events.export
+  - batcli action run --action uia.recording.session.save_macro --macro_key macro-from-session --target_key target-notepad
   - batcli action run --action uia.registry.get
   - batcli action run --action uia.adapter.update --executable_path "C:\\tools\\uiapeek.exe" --default_timeout_ms 5000
   - batcli action run --action uia.target.save --target_key target-notepad --exe_path "C:\\Windows\\System32\\notepad.exe"
+  - batcli action run --action uia.target.save --target_key target-calculator-doc --exe_path "C:\\MIDAS\\code\\clibase\\doc\\Calculator.exe" --uia_window_title ".*계산기다.*"
   - batcli action run --action uia.target.save --target_key target-gennx --exe_path "C:\\Path\\GenNX.exe" --host_reference_width_px 1280 --host_reference_height_px 720 --host_reference_coordinate_space host_reference --host_reference_placement_mode external_os_window
   - batcli action run --action uia.macro.save --macro_key macro-notepad-smoke --target_key target-notepad --steps_file "workspace/uia-steps-smoke.yaml"
   - batcli action run --action uia.macro.run --macro_key macro-notepad-smoke --target_key target-notepad --ensure_target_running true

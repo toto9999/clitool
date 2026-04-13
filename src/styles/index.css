@@ -730,6 +730,109 @@ input {
   font-size: 13px;
 }
 
+.verification-pipeline {
+  margin: 12px 0 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(116, 176, 255, 0.2);
+  background: linear-gradient(135deg, rgba(10, 28, 52, 0.85), rgba(6, 16, 32, 0.92));
+}
+
+.verification-pipeline__title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8fb2e6;
+}
+
+.verification-pipeline__track {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px 6px;
+}
+
+.verification-pipeline__arrow {
+  align-self: center;
+  color: rgba(157, 184, 223, 0.55);
+  font-size: 14px;
+  user-select: none;
+}
+
+.verification-pipeline__node {
+  flex: 1 1 140px;
+  min-width: min(100%, 160px);
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(116, 176, 255, 0.18);
+  background: rgba(5, 14, 28, 0.65);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.verification-pipeline__node-title {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #9eb8dc;
+  margin-bottom: 4px;
+}
+
+.verification-pipeline__node-body {
+  display: block;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #c8daf3;
+}
+
+.verification-pipeline__node--record-active {
+  border-color: rgba(255, 120, 140, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 120, 140, 0.25);
+  animation: verification-pulse-record 1.6s ease-in-out infinite;
+}
+
+.verification-pipeline__node--buffer-lit {
+  border-color: rgba(120, 200, 255, 0.45);
+  box-shadow: 0 0 12px rgba(80, 160, 255, 0.12);
+}
+
+.verification-pipeline__node--replay-active {
+  border-color: rgba(140, 220, 160, 0.55);
+  box-shadow: 0 0 0 1px rgba(100, 200, 130, 0.3);
+  animation: verification-pulse-replay 1.2s ease-in-out infinite;
+}
+
+.verification-pipeline__hint {
+  margin: 12px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(158, 184, 220, 0.82);
+}
+
+@keyframes verification-pulse-record {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px rgba(255, 120, 140, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(255, 100, 130, 0.35);
+  }
+}
+
+@keyframes verification-pulse-replay {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px rgba(100, 200, 130, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(80, 200, 120, 0.4);
+  }
+}
+
 .verification-runtime-panel {
   display: grid;
   gap: 10px;

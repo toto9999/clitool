@@ -1,5 +1,6 @@
 /**
  * Converts a buffered UiaPeek SignalR recording session into flaui.* macro steps.
+ * Mirror for Electron main: `electron/host-services/uia-macro/recording-payloads-to-macro-steps.cts`.
  * Heuristic: Mouse Down/Click → flaui.click; printable Keyboard Down → merged
  * flaui.set_text (default) or flaui.type per selector. set_text matches “clear then
  * type” when the final typed characters are all that was captured.

@@ -10,6 +10,7 @@ import runtimeControl from "../shared/runtime-control.cjs";
 const cwd = process.cwd();
 const stateDir = path.join(cwd, ".clibase");
 const stateFile = path.join(stateDir, "workflow-state.json");
+const INTERNAL_ROOT_ELEVATED = "--clibase-internal-root-elevated";
 const ssotFile = path.join(cwd, "doc", "0. Governance", "ssot.yaml");
 const worklogFile = path.join(cwd, "doc", "9. Worklog", "99-worklog.md");
 const workspaceRoot = path.join(cwd, "workspace");
@@ -210,6 +211,169 @@ function parseFlags(tokens) {
   }
 
   return { flags, positionals };
+}
+
+function powershellExe() {
+  return process.env.SystemRoot
+    ? path.join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+    : "powershell.exe";
+}
+
+function escapePowerShellSingleQuoted(value) {
+  return String(value).replace(/'/g, "''");
+}
+
+function stripInternalRootElevated(tokens) {
+  return tokens.filter((token) => token !== INTERNAL_ROOT_ELEVATED);
+}
+
+function isRootElevatedArgPresent(tokens) {
+  return tokens.includes(INTERNAL_ROOT_ELEVATED);
+}
+
+function canManageHyperVSync() {
+  if (process.platform !== "win32") {
+    return false;
+  }
+  const result = spawnSync(
+    powershellExe(),
+    [
+      "-NoProfile",
+      "-Command",
+      [
+        "$ErrorActionPreference = 'Stop'",
+        "try {",
+        "  Import-Module Hyper-V -ErrorAction Stop",
+        "  $null = Get-VM -ErrorAction Stop | Select-Object -First 1",
+        "  exit 0",
+        "} catch {",
+        "  exit 1",
+        "}",
+      ].join("; "),
+    ],
+    { windowsHide: true, encoding: "utf8", shell: false },
+  );
+  return result.status === 0;
+}
+
+function isWindowsAdministratorSync() {
+  if (process.platform !== "win32") {
+    return false;
+  }
+  const result = spawnSync(
+    powershellExe(),
+    [
+      "-NoProfile",
+      "-Command",
+      [
+        "$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())",
+        "$isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)",
+        "if ($isAdmin) { exit 0 }",
+        "exit 1",
+      ].join("; "),
+    ],
+    { windowsHide: true, encoding: "utf8", shell: false },
+  );
+  return result.status === 0;
+}
+
+function relaunchBatcliElevated(cliArgs) {
+  const shell = powershellExe();
+  const batcliCmd = path.join(cwd, "batcli.cmd");
+  const fallbackScript = path.join(cwd, "bin", "batcli.js");
+  const filteredArgs = stripInternalRootElevated(cliArgs);
+  const elevatedArgs = [...filteredArgs, INTERNAL_ROOT_ELEVATED];
+  const useBatcliCmd = fs.existsSync(batcliCmd);
+  const launchPath = useBatcliCmd ? batcliCmd : process.execPath;
+  const argumentList = useBatcliCmd ? elevatedArgs : [fallbackScript, ...elevatedArgs];
+  const argParts = argumentList.map((token) => `'${escapePowerShellSingleQuoted(token)}'`).join(",");
+  const launchEsc = escapePowerShellSingleQuoted(launchPath);
+  const cwdEsc = escapePowerShellSingleQuoted(cwd);
+  const command = [
+    "$ErrorActionPreference = 'Stop'",
+    "try {",
+    `  Set-Location -LiteralPath '${cwdEsc}'`,
+    `  $p = Start-Process -FilePath '${launchEsc}' -ArgumentList @(${argParts}) -WorkingDirectory '${cwdEsc}' -Verb RunAs -PassThru -Wait`,
+    "  if ($null -eq $p) { exit 1 }",
+    "  exit $p.ExitCode",
+    "} catch {",
+    "  if ($_.Exception.Message -match 'canceled by the user') {",
+    "    Write-Host 'UAC elevation was canceled by the user.'",
+    "    exit 2",
+    "  }",
+    "  throw",
+    "}",
+  ].join("; ");
+
+  return spawnSync(shell, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], {
+    cwd,
+    stdio: "inherit",
+    env: process.env,
+    shell: false,
+  });
+}
+
+function commandRequestsNoAutoElevate(tokens) {
+  const { flags } = parseFlags(tokens);
+  return Boolean(flags["no-auto-elevate"] || flags.no_auto_elevate);
+}
+
+function getCommandElevationRequirement(tokens) {
+  if (tokens.includes("--help") || tokens.includes("-h")) {
+    return null;
+  }
+
+  const [group, action, ...rest] = tokens;
+  if (group !== "vm") {
+    return null;
+  }
+
+  if (action === "network") {
+    if (rest[0] === "repair") {
+      return "admin";
+    }
+    return null;
+  }
+
+  if (action === "hyperv") {
+    return "hyperv";
+  }
+
+  if (action === "guest" && ["session", "diagnose-gennx-new-project", "app"].includes(rest[0] ?? "")) {
+    return null;
+  }
+
+  if (action === "gennx") {
+    return null;
+  }
+
+  return null;
+}
+
+function maybeAutoElevateRoot(tokens, rootElevated) {
+  if (process.platform !== "win32" || rootElevated) {
+    return false;
+  }
+  if (commandRequestsNoAutoElevate(tokens)) {
+    return false;
+  }
+
+  const requirement = getCommandElevationRequirement(tokens);
+  if (!requirement) {
+    return false;
+  }
+
+  if (requirement === "admin" && isWindowsAdministratorSync()) {
+    return false;
+  }
+  if (requirement === "hyperv" && canManageHyperVSync()) {
+    return false;
+  }
+
+  const userFacingCommand = `batcli ${tokens.join(" ")}`.trim();
+  print(`batcli: re-launching elevated once for \`${userFacingCommand}\`.`);
+  const relaunched = relaunchBatcliElevated(tokens);
+  process.exit(typeof relaunched.status === "number" ? relaunched.status : 1);
 }
 
 function writeJson(filePath, value) {
@@ -935,6 +1099,93 @@ function canRunCommand(command, args) {
 
 function runNpmCommand(args) {
   runCommand(getNpmCommand(), args);
+}
+
+function stripNamedFlagFromArgv(tokens, longName, snakeName = "") {
+  const result = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === `--${longName}` || (snakeName && token === `--${snakeName}`)) {
+      const nextToken = tokens[index + 1];
+      if (nextToken !== undefined && !String(nextToken).startsWith("--")) {
+        index += 1;
+      }
+      continue;
+    }
+    if (
+      typeof token === "string" &&
+      (token.startsWith(`--${longName}=`) || (snakeName && token.startsWith(`--${snakeName}=`)))
+    ) {
+      continue;
+    }
+    result.push(token);
+  }
+  return result;
+}
+
+function resolveVmGuestAppKey(tokens, fallback = "gennx") {
+  const { flags } = parseFlags(tokens);
+  const appKey =
+    (typeof flags.app === "string" && flags.app.trim() ? flags.app.trim() : "") ||
+    (typeof flags.app_key === "string" && flags.app_key.trim() ? flags.app_key.trim() : "") ||
+    fallback;
+  return String(appKey ?? "").trim().toLowerCase();
+}
+
+function getVmGuestAppScriptPath(appKey, operation) {
+  if (appKey === "gennx") {
+    if (operation === "launch-visible") {
+      return path.join(cwd, "scripts", "vm-gennx-launch-guest.mjs");
+    }
+    if (operation === "capture-visible") {
+      return path.join(cwd, "scripts", "vm-gennx-capture-guest.mjs");
+    }
+    if (operation === "verify-runtime") {
+      return path.join(cwd, "scripts", "vm-gennx-verify-guest.mjs");
+    }
+    if (operation === "resolve-config") {
+      return path.join(cwd, "scripts", "vm-gennx-resolve-config.mjs");
+    }
+  }
+  fail(`Unsupported vm guest app operation/app combination: ${operation} / ${appKey}.`);
+}
+
+function runVmGuestAppOperation(operation, tokens, options = {}) {
+  const appKey = resolveVmGuestAppKey(tokens, options.defaultAppKey || "gennx");
+  const scriptPath = getVmGuestAppScriptPath(appKey, operation);
+  if (!fs.existsSync(scriptPath)) {
+    fail(`Missing \`${scriptPath}\`.`);
+  }
+  const forwarded = stripNamedFlagFromArgv(tokens, "app", "app_key");
+  const result = spawnSync(process.execPath, [scriptPath, ...forwarded], {
+    cwd,
+    stdio: "inherit",
+    env: process.env,
+    shell: false,
+  });
+  if (result.error) {
+    fail(`Failed to run \`${scriptPath}\`: ${result.error.message}`);
+  }
+  if (typeof result.status === "number" && result.status !== 0) {
+    process.exit(result.status);
+  }
+}
+
+function runNodeScript(scriptPath, args, extraEnv = undefined) {
+  const result = spawnSync(process.execPath, [scriptPath, ...args], {
+    cwd,
+    stdio: "inherit",
+    env: extraEnv ? { ...process.env, ...extraEnv } : process.env,
+    shell: false,
+  });
+
+  if (result.error) {
+    fail(`Failed to run \`${scriptPath}\`: ${result.error.message}`);
+  }
+
+  if (typeof result.status === "number" && result.status !== 0) {
+    process.exit(result.status);
+  }
 }
 
 function runNpmCommandAllowFailure(args) {
@@ -1884,6 +2135,7 @@ function printHelp() {
   print("- batcli install [--no-link] [--no-textual] [--no-uia-executor] [--no-uia-peek]");
   print("- batcli uia-executor install");
   print("- batcli uia-peek download [--force]");
+  print("- batcli uia gennx verify [--target-key target-gennx] [--steps-file workspace/uia-steps-gennx-click.yaml] [--macro-key macro-gennx-runtime-verify] [--no-cleanup]  (gennx_guest_runtime; requires GenNX exe + interactive Windows)");
   print("- batcli deps add <package>");
   print("- batcli dev [--log-file .clibase/logs/dev.log] [--append-log]");
   print("- batcli smoke runtime [--timeout-ms 45000] [--poll-ms 500] [--scope workspace-default] [--skip-build] [--existing-only] [--log-file .clibase/logs/runtime-smoke.log]");
@@ -1909,10 +2161,27 @@ function printHelp() {
   print("- batcli workflow stop");
   print("- batcli docs validate");
   print("- batcli docs touch \"message\"");
+  print("- batcli vm hyperv list|start|connect|ensure-running|guest-ip [vm-name] [--vm_profile_key vm-...] [--no-auto-elevate]  (Hyper-V visible/session control)");
+  print("- batcli vm network diagnose|repair --vm_profile_key vm-... [--no-auto-elevate]  (host Internal+NAT / guest static IP recovery)");
+  print("- batcli vm guest session status|ensure-visible --vm_profile_key vm-... [--skip-ensure-vm] [--no-auto-elevate]  (guest visible login/session automation)");
+  print("- batcli vm guest diagnose-gennx-new-project --vm_profile_key vm-... [--no-auto-elevate]  (auto-login + visible New Project repro and evidence capture)");
+  print("- batcli vm guest app launch-visible|capture-visible|verify-runtime|resolve-config --app gennx --vm_profile_key vm-... [--no-auto-elevate]  (standard visible guest-product CLI; old vm gennx ... names remain aliases)");
+  print("- batcli vm gennx launch [--folder <dir>] [--exe-path <GenNX.exe>]  (HOST: local Start-Process; default folder dd Desktop x64_Release…; env CLIBASE_GENNX_LAUNCH_FOLDER / CLIBASE_GENNX_EXE)");
+  print("- batcli vm gennx capture-guest [--vm_profile_key vm-gennx-lab] [--no-auto-elevate]  (alias: vm guest app capture-visible --app gennx)");
+  print("- batcli vm gennx run [--vm_profile_key vm-gennx-lab] [--exe-path <guest>] [--direct] [--no-auto-elevate]  (alias: vm guest app launch-visible --app gennx)");
+  print("- batcli vm gennx launch-guest [...]  (same as vm gennx run)");
+  print("- batcli vm gennx verify-guest [--vm_profile_key vm-gennx-lab] [--skip-ensure-vm] [--no-auto-elevate]  (alias: vm guest app verify-runtime --app gennx)");
+  print("- batcli vm gennx resolve-config [--vm_profile_key vm-...] [--exe-path <guest-exe>]  (alias: vm guest app resolve-config --app gennx)");
 }
 
 async function main() {
-  const [group, action, ...rest] = process.argv.slice(2);
+  const rawCliArgs = process.argv.slice(2);
+  const rootElevated = isRootElevatedArgPresent(rawCliArgs);
+  const cliArgs = stripInternalRootElevated(rawCliArgs);
+
+  maybeAutoElevateRoot(cliArgs, rootElevated);
+
+  const [group, action, ...rest] = cliArgs;
 
   if (!group) {
     printHelp();
@@ -1930,6 +2199,15 @@ async function main() {
       fail("Missing `scripts/ensure-uiapeek.mjs`.");
     }
     runCommand("node", [scriptPath, ...rest]);
+    process.exit(0);
+  }
+
+  if (group === "uia" && action === "gennx" && rest[0] === "verify") {
+    const scriptPath = path.join(cwd, "scripts", "gennx-runtime-verify.mjs");
+    if (!fs.existsSync(scriptPath)) {
+      fail(`Missing \`${scriptPath}\`.`);
+    }
+    runCommand("node", [scriptPath, ...rest.slice(1)]);
     process.exit(0);
   }
 
@@ -2022,6 +2300,91 @@ async function main() {
 
   if (group === "workflow" && action === "stop") {
     await stopWorkflow();
+    process.exit(0);
+  }
+
+  if (group === "vm" && action === "hyperv") {
+    const scriptPath = path.join(cwd, "scripts", "vm-hyperv.mjs");
+    if (!fs.existsSync(scriptPath)) {
+      fail(`Missing \`${scriptPath}\`.`);
+    }
+    runNodeScript(scriptPath, rest);
+    process.exit(0);
+  }
+
+  if (group === "vm" && action === "network") {
+    const scriptPath = path.join(cwd, "scripts", "vm-network.mjs");
+    if (!fs.existsSync(scriptPath)) {
+      fail(`Missing \`${scriptPath}\`.`);
+    }
+    runNodeScript(scriptPath, rest);
+    process.exit(0);
+  }
+
+  if (group === "vm" && action === "guest" && rest[0] === "session") {
+    const scriptPath = path.join(cwd, "scripts", "vm-guest-session.mjs");
+    if (!fs.existsSync(scriptPath)) {
+      fail(`Missing \`${scriptPath}\`.`);
+    }
+    runNodeScript(scriptPath, rest.slice(1));
+    process.exit(0);
+  }
+
+  if (group === "vm" && action === "guest" && rest[0] === "diagnose-gennx-new-project") {
+    const scriptPath = path.join(cwd, "scripts", "vm-gennx-diagnose-new-project.mjs");
+    if (!fs.existsSync(scriptPath)) {
+      fail(`Missing \`${scriptPath}\`.`);
+    }
+    runNodeScript(scriptPath, rest.slice(1));
+    process.exit(0);
+  }
+
+  if (group === "vm" && action === "guest" && rest[0] === "app" && rest[1] === "launch-visible") {
+    runVmGuestAppOperation("launch-visible", rest.slice(2));
+    process.exit(0);
+  }
+
+  if (group === "vm" && action === "guest" && rest[0] === "app" && rest[1] === "capture-visible") {
+    runVmGuestAppOperation("capture-visible", rest.slice(2));
+    process.exit(0);
+  }
+
+  if (group === "vm" && action === "guest" && rest[0] === "app" && rest[1] === "verify-runtime") {
+    runVmGuestAppOperation("verify-runtime", rest.slice(2));
+    process.exit(0);
+  }
+
+  if (group === "vm" && action === "guest" && rest[0] === "app" && rest[1] === "resolve-config") {
+    runVmGuestAppOperation("resolve-config", rest.slice(2));
+    process.exit(0);
+  }
+
+  if (group === "vm" && action === "gennx" && rest[0] === "capture-guest") {
+    runVmGuestAppOperation("capture-visible", ["--app", "gennx", ...rest.slice(1)]);
+    process.exit(0);
+  }
+
+  if (group === "vm" && action === "gennx" && (rest[0] === "run" || rest[0] === "launch-guest")) {
+    runVmGuestAppOperation("launch-visible", ["--app", "gennx", ...rest.slice(1)]);
+    process.exit(0);
+  }
+
+  if (group === "vm" && action === "gennx" && rest[0] === "launch") {
+    const scriptPath = path.join(cwd, "scripts", "gennx-launch-exe.mjs");
+    if (!fs.existsSync(scriptPath)) {
+      fail(`Missing \`${scriptPath}\`.`);
+    }
+    runCommand("node", [scriptPath, ...rest.slice(1)]);
+    process.exit(0);
+  }
+
+  if (group === "vm" && action === "gennx" && rest[0] === "verify-guest") {
+    runVmGuestAppOperation("verify-runtime", ["--app", "gennx", ...rest.slice(1)]);
+    process.exit(0);
+  }
+
+  if (group === "vm" && action === "gennx" && rest[0] === "resolve-config") {
+    runVmGuestAppOperation("resolve-config", ["--app", "gennx", ...rest.slice(1)]);
     process.exit(0);
   }
 

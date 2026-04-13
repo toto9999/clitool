@@ -130,3 +130,41 @@
 - 2026-03-30 15:48:12 | UiaPeek in-app: vendor+uData preferred paths, GitHub win-x64 zip download+sha256+extract, offline flag; uiapeek-resolve preferredHostExePaths
 - 2026-03-30 15:56:35 | UiaPeek vendor via batcli uia-peek download and install; recording session to flaui macro batch; App IPC buffer; doc 28 and 17
 - 2026-03-30 16:02:48 | Default recording session merge to flaui.set_text; checkbox for type; doc 28
+- 2026-03-30 17:58:20 | Verification: clibase:uia:http-ping fallback for HTTP ping when runtime-status unavailable
+- 2026-03-31 07:50:04 | Stale runtime snapshot clear; batcli uia-peek ping; scripts/uia-peek-http-ping.mjs
+- 2026-03-31 10:49:56 | batcli smoke verification: UIA registry/macro/recording CLI smoke script
+- 2026-03-31 10:55:50 | UIA: recording buffer, save_macro action, smoke record→replay
+- 2026-03-31 11:09:57 | UiaRecordingTestHost WPF + batcli smoke --cli-auto FlaUI inject
+- 2026-03-31 11:18:40 | smoke verification: batcli bootstrap uia+peek+Electron; Python test host
+- 2026-03-31 16:32:32 | local .clibase dotnet runtime for uiapeek install and start
+- 2026-04-01 07:52:01 | add uia recording diagnose CLI runtime logs
+- 2026-04-01 07:56:57 | verify CLI can list and control target-gennx via GUI runtime actions
+- 2026-04-01 08:52:36 | avoid Electron main crash on runtime log EPIPE
+- 2026-04-01 09:09:20 | verify GenNX macro run fails from ambiguous GridControl selector
+- 2026-04-02 10:22:35 | harden runtime control socket writes against EPIPE and retest dev launch
+- 2026-04-02 10:27:43 | verify runtime survives GenNX macro run after EPIPE guards
+- 2026-04-02 10:56:18 | auto-switch verification on quick run and add lifecycle logging for exit-127 debugging
+- 2026-04-02 11:29:22 | semantic uia click + GenNX search verification
+- 2026-04-06 15:13:35 | fix: VM UIA worker stop_target deadlock on non-running target
+- 2026-04-07 09:14:14 | vm ensure-running now reopens visible vmconnect when Hyper-V is already Running but no console window is visible
+- 2026-04-07 09:24:00 | vm connect now preflights Hyper-V access and elevates vmconnect when host rights are missing; ensure-running/start/reset elevate console launch after UAC retry
+- 2026-04-07 13:27:17 | reconfigured GenNX-VM to internal NAT switch clibase-internal-nat with static 192.168.250.10; guest internet, WinRM 5985, and SMB 445 restored from host
+- 2026-04-07 13:30:21 | documented Hyper-V operator rights, stable Internal+NAT lab topology, recovery sequence, and updated vm examples for GenNX-VM (clibase-internal-nat / 192.168.250.10)
+- 2026-04-08 08:04:52 | verified GenNX-VM outbound internet again after reapply: guest ping 8.8.8.8 + http msftconnecttest 200; launched GenNX.exe and default browser visibly in session 2 from C:\Users\dd\Desktop\x64_Release_D260330_T1123_N224_r_b7_MR
+- 2026-04-08 07:59:52 | Hyper-V GenNX-VM host/guest network automation, internal NAT recovery, and visible GenNX/browser launch verification from the VM desktop build folder
+- 2026-04-09 11:09:28 | vm-gennx: scripts/vm-gennx-resolve-config.mjs + doc vm-gennx-guest-exe-resolution.yaml (exe env/profile/uia precedence); batcli.js restored from git after disk error
+- 2026-04-09 11:17:45 | batcli vm gennx resolve-config; Windows node spawn fix; AGENTS + vm-gennx doc
+- 2026-04-09 11:28:28 | GEN 동작검증: docs validate, vm gennx resolve-config, verify(타입체크·빌드) 통과. 로컬 기본 GenNX.exe 미설치로 FlaUI E2E는 미실행
+- 2026-04-09 13:04:29 | 검증 티어: repo_static vs gennx_guest_runtime 문서화(VM·화면·GEN 실동작은 후자)
+- 2026-04-09 13:08:38 | batcli uia gennx verify 추가, gennx-runtime-verify.mjs, uia-macros exe_path 한 줄, GEN 런타임 검증 문서 보강
+- 2026-04-09 13:11:30 | VM: batcli vm gennx verify-guest (WinRM), vm-profiles.yaml, vm-gennx-verify-guest.ps1
+- 2026-04-09 13:26:56 | Hyper-V: vm-gennx-verify-guest PowerShell Direct -VMName, guest cred 필수, 한글 OS Heartbeat 이름 이슈 제거
+- 2026-04-09 13:44:25 | VM verify-guest: vm-profiles dd/dddd, UAC relaunch, guest_clibase_search_roots CSV
+- 2026-04-09 16:18:42 | standardized visible guest product CLI under batcli vm guest app launch-visible/capture-visible/verify-runtime/resolve-config with vm gennx compatibility aliases
+- 2026-04-09 16:33:11 | added --no-auto-elevate fail-fast contract to visible guest app launch/capture/verify so Hyper-V permission issues return deterministically instead of hanging on silent UAC waits
+- 2026-04-10 07:43:49 | Standardized visible VM guest product launch/capture/verify under batcli vm guest app and added --no-auto-elevate fail-fast contract
+- 2026-04-10 11:42:08 | Standardized Hyper-V ensure-running/connect/guest-ip and VM network diagnose/repair under batcli; repaired GenNX VM network to WinRM/SMB-ready state and identified missing visible dd session as the remaining blocker
+- 2026-04-10 12:06:11 | Added batcli vm guest session status/ensure-visible with guest AutoAdminLogon automation, wired launch-visible to ensure the visible session first, and validated batcli.cmd operator flow plus fail-fast UAC behavior
+- 2026-04-10 13:05:03 | Moved Windows operator surface to batcli.cmd, added root one-shot elevation path in batcli for VM commands, and kept no-auto-elevate fail-fast behavior so UAC no longer needs to be handled per nested helper
+- 2026-04-10 15:08:44 | Added batcli vm guest diagnose-gennx-new-project CLI wiring, WinRM-only fallback for guest session/app flows when Hyper-V rights are unavailable, fixed guest AutoAdminLogon registry compatibility, and hardened visible diagnosis/launch scripts for locale-safe scheduled tasks plus PowerShell path compatibility
+- 2026-04-10 15:23:37 | batcli guest diagnose/session WinRM fallback and interactive task compatibility hardening

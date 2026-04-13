@@ -117,6 +117,7 @@ contextBridge.exposeInMainWorld("clibaseDesktop", {
   stopUiaRecording: async () => ipcRenderer.invoke("clibase:uia:recording-stop"),
   getUiaRecordingState: async () => ipcRenderer.invoke("clibase:uia:recording-state"),
   getUiaRuntimeStatus: async () => ipcRenderer.invoke("clibase:uia:runtime-status"),
+  getUiaHttpPing: async () => ipcRenderer.invoke("clibase:uia:http-ping"),
   onUiaRecordingEvent: (listener: (entry: unknown) => void) => {
     const wrapped = (_event: unknown, entry: unknown) => {
       listener(entry);

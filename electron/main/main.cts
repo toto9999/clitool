@@ -61,6 +61,9 @@ let durableLogStore: DurableLogStore | null = null;
 let terminalService: TerminalService | null = null;
 let uiaMacroService: UiaMacroService | null = null;
 let uiapeekRecordingBridge: UiapeekRecordingBridge | null = null;
+/** Raw SignalR recording payloads for batcli export / session.save_macro (cleared on recording start). */
+let uiaRecordingPayloadBuffer: unknown[] = [];
+const UIA_RECORDING_BUFFER_MAX = 2500;
 const defaultUiapeekHubUrl =
   process.env.CLIBASE_UIAPEEK_HUB_URL?.trim() || "http://localhost:9955/hub/v4/g4/peek";
 let isAppQuitting = false;
@@ -263,6 +266,22 @@ function getWorkspaceBridgeState(sender?: WebContents | null) {
   };
 }
 
+function clearUiaRecordingPayloadBuffer() {
+  uiaRecordingPayloadBuffer = [];
+}
+
+function appendUiaRecordingPayload(payload: unknown) {
+  uiaRecordingPayloadBuffer.push(payload);
+  if (uiaRecordingPayloadBuffer.length > UIA_RECORDING_BUFFER_MAX) {
+    const overflow = uiaRecordingPayloadBuffer.length - UIA_RECORDING_BUFFER_MAX;
+    uiaRecordingPayloadBuffer.splice(0, overflow);
+  }
+}
+
+function getUiaRecordingPayloadBuffer() {
+  return [...uiaRecordingPayloadBuffer];
+}
+
 function broadcastToWindows(channel: string, payload: unknown) {
   for (const entry of managedWindows.values()) {
     if (
@@ -326,6 +345,7 @@ async function ensureUiapeekRecordingBridge() {
     uiapeekRecordingBridge = createUiapeekRecordingBridge({
       hubUrl: defaultUiapeekHubUrl,
       onEvent: (payload) => {
+        appendUiaRecordingPayload(payload);
         broadcastToWindows("clibase:uia:recording-event", {
           received_at: new Date().toISOString(),
           payload,
@@ -875,6 +895,7 @@ app.whenReady().then(async () => {
         args: string[];
         working_dir: string;
         startup_wait_ms: number;
+        uia_window_title?: string;
         host_reference_frame?: {
           width_px: number;
           height_px: number;
@@ -887,6 +908,8 @@ app.whenReady().then(async () => {
         throw new Error("UIA macro service is not ready.");
       }
 
+      const title = typeof payload.uia_window_title === "string" ? payload.uia_window_title.trim() : "";
+
       return uiaMacroService.saveTarget({
         target_key: payload.target_key,
         target_name: payload.target_name,
@@ -894,6 +917,7 @@ app.whenReady().then(async () => {
         args: payload.args,
         working_dir: payload.working_dir,
         startup_wait_ms: payload.startup_wait_ms,
+        ...(title ? { uia_window_title: title } : {}),
         host_reference_frame: payload.host_reference_frame as UiaHostReferenceFrame | null | undefined,
       });
     },
@@ -1108,6 +1132,15 @@ app.whenReady().then(async () => {
       uiapeek_http_ping_ok,
     };
   });
+  ipcMain.handle("clibase:uia:http-ping", async () => {
+    let ok = false;
+    try {
+      ok = await pingUiaPeekHubUrl(defaultUiapeekHubUrl);
+    } catch {
+      ok = false;
+    }
+    return { ok, hub_url: defaultUiapeekHubUrl };
+  });
 
   runtimeControlServer = createRuntimeControlServer({
     appMode: isDevelopment ? "development" : "production",
@@ -1119,6 +1152,8 @@ app.whenReady().then(async () => {
     getUiaMacroService: () => uiaMacroService,
     getUiapeekRecordingBridge,
     ensureUiapeekRecordingBridge,
+    getUiaRecordingPayloadBuffer,
+    clearUiaRecordingPayloadBuffer,
     defaultUiapeekHubUrl,
     syncPrimaryBrowserSurface: async () => {
       await syncWindowAssignments();

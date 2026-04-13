@@ -1,0 +1,42 @@
+# GenNX guest exe resolution (clibase VM / UIA tooling)
+#
+# Used by:
+#   - npm run vm-gennx:resolve-config
+#   - node scripts/vm-gennx-resolve-config.mjs
+#   - batcli vm gennx resolve-config [--vm_profile_key ...] [--exe-path ...]
+# Larger trees may also wire the same precedence into batcli vm guest diagnose / probe.
+#
+# Precedence for the primary exe_path:
+#   1) CLI --exe-path
+#   2) Environment: CLIBASE_VM_GENNX_EXE or CLIBASE_GUEST_GENNX_EXE
+#   3) workspace/vm-profiles.yaml: vm_profiles[].guest_gennx_exe (Windows path on the guest)
+#   4) workspace/uia-macros.yaml: targets[].exe_path for the profile's target_key
+#   5) Default: C:\Program Files\MIDAS\MODS NX\MIDAS GEN NX\GenNX.exe
+#
+# Optional environment:
+#   - CLIBASE_VM_GENNX_PROCESS_NAME (default GenNX)
+#   - CLIBASE_VM_GENNX_WINDOW_TITLE_PREFIX (default MIDAS GEN NX)
+#   - CLIBASE_VM_GENNX_EXE_CANDIDATES — extra paths to check (semicolon or pipe separated)
+#
+# Example vm_profiles entry:
+#   - vm_profile_key: vm-gennx-01
+#     target_key: target-gennx
+#     guest_gennx_exe: "C:\\Program Files\\MIDAS\\MODS NX\\MIDAS GEN NX\\GenNX.exe"
+#
+# VM verify (Hyper-V host):
+#   - batcli vm gennx verify-guest --vm_profile_key vm-gennx-lab
+#   - Default: PowerShell Direct (Invoke-Command -VMName, VMBus). No guest IP / TrustedHosts required.
+#   - -SkipEnsureVm: WinRM only (Invoke-Command -ComputerName + TCP 5985 wait).
+#   - Guest credentials: workspace/vm-profiles.yaml guest_local_user / guest_local_password (vm-gennx-lab lab defaults),
+#     or CLIBASE_VM_WINRM_USER / CLIBASE_VM_WINRM_PASSWORD (aliases CLIBASE_VM_GUEST_*). Launcher applies .\\dd / dddd if unset.
+#   - Hyper-V: vm-gennx-verify-guest.mjs re-launches once with UAC if Get-VM is unavailable without elevation.
+#   - workspace/vm-profiles.yaml: hyper_v_vm_name, guest_winrm_host (WinRM path), guest_clibase_root
+
+version: 1
+resolution_order:
+  - flag_exe_path
+  - env_CLIBASE_VM_GENNX_EXE
+  - env_CLIBASE_GUEST_GENNX_EXE
+  - vm_profile_guest_gennx_exe
+  - uia_macros_target_exe_path
+  - default_mods_nx_path

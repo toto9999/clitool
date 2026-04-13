@@ -26,7 +26,12 @@
     "typecheck:electron": "tsc --noEmit -p tsconfig.electron.json",
     "verify": "node ./bin/batcli.js verify",
     "docs:validate": "node ./bin/batcli.js docs validate",
-    "workflow:status": "node ./bin/batcli.js workflow status"
+    "workflow:status": "node ./bin/batcli.js workflow status",
+    "uia:record-terminal": "tsx scripts/uia-terminal-record.ts",
+    "uia:pipeline-e2e": "node scripts/uia-terminal-e2e.mjs",
+    "uia:verify-test-host-exe": "node scripts/verify-uia-recording-test-host-exe.mjs",
+    "uia:install-runtime": "node scripts/ensure-dotnet-aspnetcore-runtime.mjs",
+    "vm-gennx:resolve-config": "node scripts/vm-gennx-resolve-config.mjs"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -56,6 +61,7 @@
     "concurrently": "9.2.1",
     "electron": "41.0.3",
     "tailwindcss": "4.1.12",
+    "tsx": "^4.21.0",
     "tw-animate-css": "1.3.8",
     "typescript": "^5.9.3",
     "vite": "6.3.5",

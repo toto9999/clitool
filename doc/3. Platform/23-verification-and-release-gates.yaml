@@ -15,6 +15,43 @@ decision-summary:
   - PoC gates come before broad feature implementation
   - release gates include docs, package, runtime, and security checks
 
+verification_tiers:
+  purpose: >
+    Separate repository/build proof from live guest-application proof. Calling
+    `batcli verify` success does not imply VM availability, an interactive
+    desktop session, or that GenNX (GEN) ran on screen.
+  tiers:
+    - tier_key: repo_static
+      summary: Documentation and compile-time/build artifact gates.
+      typical_commands:
+        - batcli docs validate
+        - batcli typecheck
+        - batcli build
+        - batcli verify
+      excludes:
+        - VM guest boot and connectivity
+        - interactive user session / visible UI automation surface
+        - guest EXE process launch (GenNX or other targets)
+        - FlaUI or UiaPeek steps against a live target PID
+    - tier_key: gennx_guest_runtime
+      summary: >
+        Proof that GenNX runs in a suitable Windows guest context and UIA
+        automation can act on the live process. Required for any claim of
+        "GEN 동작 검증" or GenNX macro verification completeness.
+      prerequisites:
+        - Windows guest with an interactive session policy that allows UI automation (local console or VM with display/session rules met)
+        - GenNX installed and executable at a resolved path (see batcli vm gennx resolve-config and vm-gennx-guest-exe-resolution.yaml)
+        - UIA executor venv (`batcli uia-executor install`), `target-gennx` (or chosen key) in `workspace/uia-macros.yaml` with a resolvable `exe_path`; Electron shell is optional when using `scripts/uia-macro-cli.mjs` or `batcli uia gennx verify` (loads `dist-electron` uia-macro-service in-process; see `28-desktop-uia-macro-verification.yaml`)
+      not_sufficient:
+        - batcli verify passing alone
+        - batcli vm gennx resolve-config emitting JSON without launching the exe or running steps
+      proof_examples:
+        - batcli vm gennx verify-guest --vm_profile_key vm-gennx-lab (Hyper-V host: Start-VM, then PowerShell Direct -VMName to run batcli uia gennx verify on guest; requires CLIBASE_VM_WINRM_USER/PASSWORD for guest admin, guest repo with node and uia-executor)
+        - batcli uia gennx verify (same FlaUI body on the machine where the command runs — use inside an interactive VM/RDP session if GenNX is only on the guest)
+        - uia.target.launch for target-gennx (or equivalent) with a running process and visible window when the scenario requires UI
+        - uia.macro.run or flaui.* steps completing against the target PID via cli-host/uia-executor/run_step.py
+        - scripted smoke such as scripts/uia-verification-smoke.mjs against the chosen target when the operator enables full runtime mode with Electron
+
 gate-stages:
   - architecture-poc
   - implementation-ready

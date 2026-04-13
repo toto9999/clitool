@@ -22,6 +22,20 @@ import { recordingPayloadsToMacroSteps } from "../utils/uiaRecordingSessionToMac
 /** Matches `defaultUiapeekHubUrl` in electron/main/main.cts when CLIBASE_UIAPEEK_HUB_URL is unset. */
 const DEFAULT_UIAPEEK_HUB_URL_FALLBACK = "http://localhost:9955/hub/v4/g4/peek";
 
+/** Renderer fallback when IPC ping is missing; same port as UiaPeek HTTP REST. */
+async function probeUiaPeekHttpPingFetch(): Promise<boolean | null> {
+  try {
+    const res = await fetch("http://127.0.0.1:9955/api/v4/g4/ping", {
+      method: "GET",
+      cache: "no-store",
+      signal: AbortSignal.timeout(4000),
+    });
+    return res.ok;
+  } catch {
+    return null;
+  }
+}
+
 type DesktopStatus =
   | {
       kind: "browser-preview";
@@ -410,9 +424,12 @@ export default function App() {
   const [uiaRecordingSessionCount, setUiaRecordingSessionCount] = useState(0);
   const [uiaRecordingMergedAsSetText, setUiaRecordingMergedAsSetText] = useState(true);
   const [uiaRecordingOp, setUiaRecordingOp] = useState<"idle" | "start" | "stop">("idle");
+  const [uiaMacroRunOp, setUiaMacroRunOp] = useState<"idle" | "running">("idle");
+  const [uiaReplayStatusLabel, setUiaReplayStatusLabel] = useState("대기 (Run macro)");
   const [uiaRuntimeSnapshot, setUiaRuntimeSnapshot] = useState<ClibaseUiaRuntimeStatusResult | null>(
     null,
   );
+  const [uiaPeekHttpPingFallback, setUiaPeekHttpPingFallback] = useState<boolean | null>(null);
   const [uiaRuntimeSnapshotError, setUiaRuntimeSnapshotError] = useState<string | null>(null);
   const terminalHostRef = useRef<HTMLDivElement | null>(null);
   const browserSurfaceSlotRef = useRef<HTMLDivElement | null>(null);
@@ -495,6 +512,18 @@ export default function App() {
     workspaceSummary.browserDockPosition === "top" ||
     workspaceSummary.browserDockPosition === "bottom";
   const isVerificationMode = workbenchSidePanel === "verification";
+  const verificationRecordingPipeline = useMemo(() => {
+    if (uiaRecordingOp === "start") {
+      return { phase: "connecting" as const, label: "UiaPeek·SignalR 연결 중…" };
+    }
+    if (uiaRecordingOp === "stop") {
+      return { phase: "stopping" as const, label: "녹화 세션 중지 중…" };
+    }
+    if (uiaRecordingState?.is_recording) {
+      return { phase: "live" as const, label: "녹화 LIVE · 대상 EXE에서 조작하세요" };
+    }
+    return { phase: "idle" as const, label: "대기 (Start recording)" };
+  }, [uiaRecordingOp, uiaRecordingState?.is_recording]);
   const isTerminalFocusMode = workbenchSidePanel === "terminal";
   const isBrowserSurfaceHidden =
     workspaceSummary.browserCollapsed || isTerminalFocusMode || isVerificationMode;
@@ -804,14 +833,20 @@ export default function App() {
       return;
     }
 
+    if (typeof bridge.getUiaRuntimeStatus !== "function") {
+      setUiaRuntimeSnapshot(null);
+    }
+
     if (typeof bridge.getUiaRuntimeStatus === "function") {
       try {
         const snap = await bridge.getUiaRuntimeStatus();
         setUiaRuntimeSnapshot(snap);
         setUiaRecordingState(snap.recording_state);
         setUiaRuntimeSnapshotError(null);
+        setUiaPeekHttpPingFallback(null);
         return;
       } catch (error) {
+        setUiaRuntimeSnapshot(null);
         setUiaRuntimeSnapshotError(error instanceof Error ? error.message : String(error));
       }
     }
@@ -824,6 +859,20 @@ export default function App() {
       setUiaRecordingState(null);
       setUiaRuntimeSnapshotError((prev) => prev ?? (error instanceof Error ? error.message : String(error)));
     }
+
+    let pingFallback: boolean | null = null;
+    if (typeof bridge.getUiaHttpPing === "function") {
+      try {
+        const p = await bridge.getUiaHttpPing();
+        pingFallback = p.ok;
+      } catch {
+        pingFallback = null;
+      }
+    }
+    if (pingFallback === null) {
+      pingFallback = await probeUiaPeekHttpPingFetch();
+    }
+    setUiaPeekHttpPingFallback(pingFallback);
   }, []);
 
   const launchQuickExe = async () => {
@@ -1064,6 +1113,8 @@ export default function App() {
       return;
     }
 
+    setUiaMacroRunOp("running");
+    setUiaReplayStatusLabel("재현 중 · 외부 EXE 창에서 FlaUI 스텝이 실행됩니다…");
     try {
       const result = await bridge.runUiaMacro({
         macro_key: macroKey,
@@ -1071,12 +1122,19 @@ export default function App() {
         ensure_target_running: uiaEnsureTargetRunning,
       });
       setUiaResultText(formatStructuredResult(result));
+      setUiaReplayStatusLabel(
+        `재현 완료 · ${result.succeeded_step_count}/${result.step_count} 스텝 · ${result.status}`,
+      );
       setUiaNotice(
         `Macro run ${result.status}: ${result.macro_key} (${result.succeeded_step_count}/${result.step_count})`,
       );
       await refreshUiaRegistry();
     } catch (error) {
-      setUiaNotice(error instanceof Error ? error.message : String(error));
+      const msg = error instanceof Error ? error.message : String(error);
+      setUiaReplayStatusLabel(`재현 실패: ${msg}`);
+      setUiaNotice(msg);
+    } finally {
+      setUiaMacroRunOp("idle");
     }
   };
 
@@ -1121,7 +1179,7 @@ export default function App() {
       setUiaRecordingState(next);
       setUiaResultText(formatStructuredResult(next));
       setUiaNotice("UiaPeek recording session started (SignalR). Session buffer cleared for a new macro.");
-      void refreshUiaRuntimeSnapshot();
+      await refreshUiaRuntimeSnapshot();
     } catch (error) {
       setUiaNotice(error instanceof Error ? error.message : String(error));
     } finally {
@@ -1142,7 +1200,7 @@ export default function App() {
       setUiaRecordingState(next);
       setUiaResultText(formatStructuredResult(next));
       setUiaNotice("UiaPeek recording stopped.");
-      void refreshUiaRuntimeSnapshot();
+      await refreshUiaRuntimeSnapshot();
     } catch (error) {
       setUiaNotice(error instanceof Error ? error.message : String(error));
     } finally {
@@ -1161,7 +1219,7 @@ export default function App() {
       setUiaRecordingState(next);
       setUiaResultText(formatStructuredResult(next));
       setUiaNotice("UiaPeek recording state refreshed.");
-      void refreshUiaRuntimeSnapshot();
+      await refreshUiaRuntimeSnapshot();
     } catch (error) {
       setUiaNotice(error instanceof Error ? error.message : String(error));
     }
@@ -3004,6 +3062,60 @@ export default function App() {
 
                   <p className="verification-notice">{uiaNotice}</p>
 
+                  <section
+                    className="verification-pipeline"
+                    aria-label="EXE 매크로 녹화와 재현 단계"
+                    aria-live="polite"
+                  >
+                    <div className="verification-pipeline__title">녹화 → 버퍼 → 재현</div>
+                    <div className="verification-pipeline__track">
+                      <div
+                        className={
+                          verificationRecordingPipeline.phase !== "idle"
+                            ? "verification-pipeline__node verification-pipeline__node--record-active"
+                            : "verification-pipeline__node"
+                        }
+                      >
+                        <span className="verification-pipeline__node-title">1 · 녹화</span>
+                        <span className="verification-pipeline__node-body">
+                          {verificationRecordingPipeline.label}
+                        </span>
+                      </div>
+                      <span className="verification-pipeline__arrow" aria-hidden>
+                        →
+                      </span>
+                      <div
+                        className={
+                          uiaRecordingSessionCount > 0
+                            ? "verification-pipeline__node verification-pipeline__node--buffer-lit"
+                            : "verification-pipeline__node"
+                        }
+                      >
+                        <span className="verification-pipeline__node-title">2 · 세션 버퍼</span>
+                        <span className="verification-pipeline__node-body">
+                          {uiaRecordingSessionCount} event(s) · Generate / Save 로 YAML 반영
+                        </span>
+                      </div>
+                      <span className="verification-pipeline__arrow" aria-hidden>
+                        →
+                      </span>
+                      <div
+                        className={
+                          uiaMacroRunOp === "running"
+                            ? "verification-pipeline__node verification-pipeline__node--replay-active"
+                            : "verification-pipeline__node"
+                        }
+                      >
+                        <span className="verification-pipeline__node-title">3 · 재현</span>
+                        <span className="verification-pipeline__node-body">{uiaReplayStatusLabel}</span>
+                      </div>
+                    </div>
+                    <p className="verification-pipeline__hint">
+                      녹화는 UiaPeek(SignalR), 재현은 저장된 매크로로 대상 EXE에 FlaUI 스텝을 그대로 재실행합니다. 재현
+                      중에는 아래 Result에 단계별 결과가 쌓입니다.
+                    </p>
+                  </section>
+
                   <section className="verification-runtime-panel" aria-label="EXE and UiaPeek runtime status">
                     <div className="verification-runtime-panel__head">
                       <h3 className="verification-runtime-panel__title">Runtime status</h3>
@@ -3089,25 +3201,45 @@ export default function App() {
                           <div>
                             <dt>HTTP hub (GET /api/v4/g4/ping)</dt>
                             <dd>
-                              {uiaRuntimeSnapshot
-                                ? uiaRuntimeSnapshot.uiapeek_http_ping_ok
-                                  ? "reachable (UiaPeek HTTP is up)"
-                                  : "unreachable — run UiaPeek.exe on this port or check firewall"
-                                : "unknown (refresh when runtime status IPC is available)"}
+                              {(() => {
+                                const pingOk =
+                                  uiaRuntimeSnapshot !== null
+                                    ? uiaRuntimeSnapshot.uiapeek_http_ping_ok
+                                    : uiaPeekHttpPingFallback;
+                                if (pingOk === true) {
+                                  return "reachable (UiaPeek HTTP is up)";
+                                }
+                                if (pingOk === false) {
+                                  return "unreachable — run UiaPeek.exe on this port or check firewall";
+                                }
+                                return "unknown — could not confirm GET /api/v4/g4/ping (UiaPeek not listening, blocked, or probe failed; try batcli uia-peek ping)";
+                              })()}
                             </dd>
                           </div>
                           <div>
                             <dt>SignalR connection state</dt>
                             <dd>
-                              <div>
-                                {uiaRuntimeSnapshot?.recording_state.connection_state ??
-                                  uiaRecordingState?.connection_state ??
-                                  "Disconnected"}
-                              </div>
-                              <div className="verification-runtime-panel__muted">
-                                Disconnected is normal before Start recording. This is not the HTTP ping row
-                                above.
-                              </div>
+                              {(() => {
+                                const cs = uiaRuntimeSnapshot?.recording_state ?? uiaRecordingState;
+                                const conn = cs?.connection_state ?? "Disconnected";
+                                const isRec = cs?.is_recording === true;
+                                const friendly =
+                                  conn === "Disconnected" && !isRec
+                                    ? "Idle (not recording yet)"
+                                    : conn === "Disconnected" && isRec
+                                      ? "Disconnected (unexpected while recording)"
+                                      : conn;
+                                return (
+                                  <>
+                                    <div>{friendly}</div>
+                                    <div className="verification-runtime-panel__muted">
+                                      {conn === "Disconnected" && !isRec
+                                        ? `Hub raw: ${conn}. Normal before Start recording; separate from HTTP ping above.`
+                                        : `Hub raw: ${conn}.`}
+                                    </div>
+                                  </>
+                                );
+                              })()}
                             </dd>
                           </div>
                           <div>

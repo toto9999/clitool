@@ -178,6 +178,11 @@ interface ClibaseUiaRuntimeStatusResult {
   uiapeek_http_ping_ok: boolean;
 }
 
+interface ClibaseUiaHttpPingResult {
+  ok: boolean;
+  hub_url: string;
+}
+
 interface ClibaseUiaRecordingEventEnvelope {
   received_at: string;
   payload: unknown;
@@ -408,6 +413,7 @@ interface ClibaseDesktopBridge {
   stopUiaRecording: () => Promise<ClibaseUiaRecordingState>;
   getUiaRecordingState: () => Promise<ClibaseUiaRecordingState>;
   getUiaRuntimeStatus: () => Promise<ClibaseUiaRuntimeStatusResult>;
+  getUiaHttpPing: () => Promise<ClibaseUiaHttpPingResult>;
   onUiaRecordingEvent: (
     listener: (entry: ClibaseUiaRecordingEventEnvelope) => void,
   ) => () => void;

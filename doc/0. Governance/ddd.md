@@ -71,6 +71,7 @@
 - `SecretService`: host에서만 동작하는 secret create/resolve/rotate/revoke 계층
 - `PermissionDecision`: allow, confirm, deny, dev-only 중 하나의 정책 판단
 - `ReleaseGate`: 배포 전에 반드시 통과해야 하는 검증 기준
+- `VerificationTier`: 검증 범위 층위; `repo_static`(문서·타입체크·빌드·`batcli verify` 등)과 `gennx_guest_runtime`(VM·인터랙티브 화면·GenNX 기동·라이브 PID 대상 UIA)을 구분한다. 상세는 `doc/3. Platform/23-verification-and-release-gates.yaml`의 `verification_tiers`
 - `TrustedSource`: 패키지, 바이너리, Skill, MCP, ref 자산의 출처와 신뢰 수준 기록
 - `ProjectTab`: 프로젝트 내부의 독립 작업 공간
 - `ProjectTabStrip`: 프로젝트 내부 탭을 IDE처럼 상단에 배치하는 주 탭 surface

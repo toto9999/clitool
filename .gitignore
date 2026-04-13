@@ -5,6 +5,8 @@ dist/
 dist-electron/
 .vite/
 .clibase/
+tools/uia-recording-test-host/UiaRecordingTestHost.spec
+tools/uia-recording-test-host/build-exe-work/
 workspace-state/
 workspace/logs/
 *.log

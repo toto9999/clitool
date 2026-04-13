@@ -45,6 +45,8 @@ interface UiaTargetRecord {
   startup_wait_ms: number;
   created_at: string;
   updated_at: string;
+  /** When set, FlaUI steps connect via pywinauto title_re (helps PyInstaller/bootstrap PID mismatch). */
+  uia_window_title?: string;
   host_reference_frame?: UiaHostReferenceFrame;
 }
 
@@ -90,6 +92,7 @@ interface SaveTargetPayload {
   args: string[];
   working_dir: string;
   startup_wait_ms: number;
+  uia_window_title?: string;
   host_reference_frame?: UiaHostReferenceFrame | null;
 }
 
@@ -268,6 +271,7 @@ function normalizeStore(rawValue: unknown, storePath: string) {
         );
         const now = new Date().toISOString();
         const hostFrame = normalizeHostReferenceFrame(target.host_reference_frame);
+        const uiaWindowTitle = normalizeString(target.uia_window_title);
         return {
           target_key: targetKey,
           target_name: normalizeString(target.target_name) || targetKey,
@@ -277,6 +281,7 @@ function normalizeStore(rawValue: unknown, storePath: string) {
           startup_wait_ms: Math.max(normalizeNumber(target.startup_wait_ms, 1200), 0),
           created_at: normalizeString(target.created_at) || now,
           updated_at: normalizeString(target.updated_at) || now,
+          ...(uiaWindowTitle ? { uia_window_title: uiaWindowTitle } : {}),
           ...(hostFrame ? { host_reference_frame: hostFrame } : {}),
         } satisfies UiaTargetRecord;
       })
@@ -692,6 +697,7 @@ export function createUiaMacroService(options: UiaMacroServiceOptions) {
     adapterConfig: UiaAdapterConfig,
     stepRecord: UiaMacroStepRecord,
     targetState: ReturnType<typeof buildTargetRuntimeState>,
+    targetRecord: UiaTargetRecord,
   ) => {
     if (process.platform !== "win32") {
       throw new Error(`Step ${stepRecord.step_key}: flaui.* steps require Windows.`);
@@ -707,25 +713,31 @@ export function createUiaMacroService(options: UiaMacroServiceOptions) {
       throw new Error(`Step ${stepRecord.step_key} has invalid flaui action_name.`);
     }
 
-    if (!targetState.pid) {
-      throw new Error(`Step ${stepRecord.step_key} requires a running target process (pid).`);
+    const timeoutMs = stepRecord.timeout_ms ?? adapterConfig.default_timeout_ms;
+    const windowTitle = normalizeString(targetRecord.uia_window_title ?? "");
+    if (!windowTitle && !targetState.pid) {
+      throw new Error(
+        `Step ${stepRecord.step_key} requires a running target pid or target uia_window_title.`,
+      );
     }
 
-    const timeoutMs = stepRecord.timeout_ms ?? adapterConfig.default_timeout_ms;
     const payload = JSON.stringify({
       action: subAction,
       selector: stepRecord.selector,
       value: stepRecord.value,
       pid: targetState.pid,
+      window_title: windowTitle,
       timeout_ms: timeoutMs,
     });
 
     const pythonExe = resolvePythonExecutable(adapterConfig);
     const commandResult = spawnSync(pythonExe, [scriptPath], {
+      cwd: repoRoot,
       encoding: "utf8",
       input: payload,
       windowsHide: true,
-      timeout: Math.max(timeoutMs + 2000, 3000),
+      // Allow pywinauto/UIA to use full step timeout; Node must not kill the child first.
+      timeout: Math.max(timeoutMs + 15000, 10000),
       shell: false,
     });
 
@@ -836,6 +848,7 @@ export function createUiaMacroService(options: UiaMacroServiceOptions) {
             store.uia_adapter,
             stepRecord,
             runtimeState,
+            targetRecord,
           );
           stepResults.push({
             step_key: stepRecord.step_key,
@@ -970,6 +983,11 @@ export function createUiaMacroService(options: UiaMacroServiceOptions) {
         }
       }
 
+      const uiaWindowTitle = normalizeString(
+        payload.uia_window_title !== undefined
+          ? payload.uia_window_title
+          : (existingTarget?.uia_window_title ?? ""),
+      );
       const nextTarget = {
         target_key: targetKey,
         target_name: normalizeString(payload.target_name) || targetKey,
@@ -979,6 +997,7 @@ export function createUiaMacroService(options: UiaMacroServiceOptions) {
         startup_wait_ms: Math.max(payload.startup_wait_ms, 0),
         created_at: existingTarget?.created_at ?? timestamp,
         updated_at: timestamp,
+        ...(uiaWindowTitle ? { uia_window_title: uiaWindowTitle } : {}),
         ...(hostFrame ? { host_reference_frame: hostFrame } : {}),
       } satisfies UiaTargetRecord;
 

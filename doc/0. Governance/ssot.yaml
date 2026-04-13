@@ -103,6 +103,7 @@ product:
       - workflow commands and future product control commands share the batcli entrypoint
       - project cli contexts derive from batcli scope and profile resolution by default
       - install, dev, build, typecheck, and verify entrypoints must be callable from batcli
+      - guest EXE runtime verification (e.g. GenNX on a VM with interactive UI) is a distinct tier from batcli verify; see doc/3. Platform/23-verification-and-release-gates.yaml verification_tiers
     primary_value:
       - let users configure custom cli workflows per project on top of a global cli base
       - let ai control every stable app capability through the same cli and action system

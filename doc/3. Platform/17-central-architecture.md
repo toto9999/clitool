@@ -120,7 +120,7 @@
 clibase/                                  # 현재 프로젝트 루트
   AGENTS.md                               # 에이전트 작업용 짧은 맵(하네스/검증/문서 진입점)
   bin/                                    # 로컬 CLI와 문서 workflow 도구
-    batcli.js                             # workflow와 install/dev/build/typecheck/verify를 수행하는 Global CLI 엔트리 (Windows에서 batcli install 시 .clibase/python/uia-executor venv와 선택적 vendor/uia-peek/UiaPeek.exe batcli uia-peek download까지; --no-uia-peek로 생략)
+    batcli.js                             # workflow와 install/dev/build/typecheck/verify를 수행하는 Global CLI 엔트리 (Windows에서 batcli install 시 .clibase/python/uia-executor venv, .clibase/dotnet .NET shared runtime, 그리고 선택적 vendor/uia-peek/UiaPeek.exe batcli uia-peek download까지; --no-uia-peek로 생략)
   batcli.cmd                              # Windows repo-root bootstrap wrapper
   batcli.ps1                              # PowerShell repo-root bootstrap wrapper
   cli-host/                               # Global CLI의 interactive host 구현
@@ -165,6 +165,8 @@ clibase/                                  # 현재 프로젝트 루트
     runtime-control.cjs                   # local named pipe/socket endpoint 계산
   scripts/                                # 실행 bootstrap 보조 스크립트
     ensure-uiapeek.mjs                    # batcli uia-peek download: g4-api/uia-peek 릴리스 zip에서 UiaPeek.exe를 vendor/uia-peek/에 복사
+    ensure-dotnet-aspnetcore-runtime.mjs # batcli install / batcli uia-peek install-runtime: UiaPeek용 .NET 8 AspNetCore+WindowsDesktop shared runtime을 .clibase/dotnet 아래로 보장
+    uia-peek-http-ping.mjs                # batcli uia-peek ping: localhost 허브 GET /api/v4/g4/ping (Electron과 동일 프로브)
     run-electron-dev.cjs                  # renderer dev server와 fresh electron build 산출물을 기다린 뒤 desktop shell을 실행
     launch-electron-dev.cjs               # Codex/Windows 환경에서 Electron Node 모드 shadowing을 제거하고 desktop shell 실행
   src/                                    # 현재 실제 최소 렌더러 부트스트랩 코드
@@ -213,19 +215,22 @@ clibase/                                  # 현재 프로젝트 루트
   - Electron compile과 renderer build 스크립트 포함
 - `bin/batcli.js`
   - 현재 `batcli` executable의 구현
-  - 현재는 workflow/docs 기능, install/dev/build/typecheck/verify, smoke runtime, action run 진입점이 들어간 상태
+  - 현재는 workflow/docs 기능, install/dev/build/typecheck/verify, smoke runtime, smoke verification, action run 진입점이 들어간 상태
   - `batcli dev --log-file ...`로 long-running dev output을 batcli-managed file sink로 남길 수 있다
   - `batcli smoke runtime`은 제한 환경에서 `dev` 체인(vite/concurrently) 없이 dist renderer 기반 Electron을 올리고 `app.ping`으로 runtime control endpoint readiness를 확인한다
   - `batcli smoke runtime --existing-only`는 이미 실행 중인 endpoint만 검증하는 모드다
+  - `batcli smoke verification`(Windows)은 **진입 시** `ensureUiaExecutorInstalled`·`ensureUiaPeekVendorInstalled` 후 `app.ping`이 없으면 `dist` 빌드(필요 시)와 **detached** Electron 기동으로 런타임을 맞춘다. 이후 기본 흐름은 `uia.target.launch` → `uia.recording.start/stop` → `uia.recording.session.save_macro` → `uia.macro.run` → 정리다. `--static-only`면 YAML 스텝만 저장/실행한다. `--cli-auto`는 `tools/uia-recording-test-host/app.py`(Tkinter)를 타깃으로 등록하고 녹화 중 FlaUI로 `Name:Recording test click` 클릭을 주입한다. 구현은 `scripts/uia-verification-smoke.mjs`와 `bin/batcli.js`의 `ensureVerificationRuntimeBootstrap`이다
   - product dependency add/update도 `batcli deps add ...`로 끌어올리는 기준 진입점
   - 장기적으로 Global CLI product command entrypoint로 확장될 대상
   - install
   - deps add
   - dev
   - smoke runtime
+  - smoke verification
   - build
   - typecheck
   - verify
+    - `batcli verify`는 **repo_static** 게이트(문서·타입체크·빌드 등)에 해당한다. VM·인터랙티브 화면·GenNX 실제 기동은 **gennx_guest_runtime** 티어로 별도 정의한다(`23-verification-and-release-gates.yaml`의 `verification_tiers`). VM 랩: Hyper-V 호스트에서 `batcli vm gennx verify-guest`(WinRM으로 게스트에서 `batcli uia gennx verify` 실행). 단일 세션: `batcli uia gennx verify`(`scripts/gennx-runtime-verify.mjs`).
   - action run
   - workflow start/to-doc/to-code/status/stop
   - docs validate/touch
@@ -735,3 +740,27 @@ terminal command or gui action or ai action
 - 이 제품은 CLI-first automation workbench다
 - GUI, AI, Skill, MCP는 같은 시스템을 다루는 surface다
 - 프로젝트는 그 시스템이 실제로 운영되는 핵심 단위다
+## VM Guest App CLI
+
+- visible guest product launch/inspection operator contract는 `batcli vm guest app launch-visible|capture-visible|verify-runtime|resolve-config`로 정리한다
+- 현재 first-class `--app` 값은 `gennx`이며, 기존 `batcli vm gennx ...`는 호환 alias로만 유지한다
+- `launch-visible`, `capture-visible`, `verify-runtime`는 공통으로 `--no-auto-elevate`를 받아 deterministic permission failure를 반환할 수 있어야 한다
+- guest product commands는 profiled `guest_winrm_host`가 있고 Hyper-V 권한이 없는 셸이면 먼저 WinRM-only path로 폴백해서 불필요한 UAC를 만들지 않아야 한다
+- interactive `launch-visible`는 visible desktop 전제가 필요하므로 `batcli vm guest session ensure-visible`를 내부에서 호출해 guest 로그인 상태를 먼저 맞춰야 한다
+- GenNX `left menu -> New Project` 재현은 일반 launch/capture와 분리해 `batcli vm guest diagnose-gennx-new-project`로 유지한다
+
+## VM Guest Session CLI
+
+- visible guest login/session control도 `batcli vm guest session status|ensure-visible --vm_profile_key vm-...`로 정리한다
+- `ensure-visible`는 profiled guest credential로 AutoAdminLogon을 설정하고 guest reboot 후 explorer shell까지 확인하는 lab automation contract다
+- guest session commands도 Hyper-V 권한이 없고 profiled `guest_winrm_host`가 reachable하면 WinRM-only path로 guest visible-session 보장을 계속 진행해야 한다
+- Windows operator surface는 `batcli.cmd`를 통해 `batcli ...`를 직접 실행하는 쪽을 기본으로 삼고, PowerShell wrapper는 구현 세부로만 남긴다
+
+## VM Hyper-V And Network CLI
+
+- visible guest automation 전에 필요한 VM 전원/콘솔/네트워크 복구도 `batcli` 계약으로 노출한다
+- Hyper-V plane은 `batcli vm hyperv ensure-running|connect|guest-ip --vm_profile_key vm-...`로 정리한다
+- guest reachability plane은 `batcli vm network diagnose|repair --vm_profile_key vm-...`로 정리한다
+- `network repair`는 profiled Internal switch/NAT, VM adapter VLAN/isolation, guest static IPv4 + WinRM/firewall baseline을 한 번에 재적용하는 복구 엔트리다
+- Hyper-V 또는 host network mutation이 필요한 명령은 공통으로 `--no-auto-elevate`를 받아 deterministic permission failure를 반환할 수 있어야 한다
+- Windows operator surface는 `batcli.cmd`를 기본으로 삼되, guest-only automation은 WinRM fallback으로 UAC 자체를 피하고 host mutation 명령만 필요한 경우에만 one-shot elevation을 사용한다

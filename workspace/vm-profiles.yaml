@@ -1,0 +1,27 @@
+# Lab example: Hyper-V guest + GenNX. Override in production (do not commit real secrets to public repos).
+# Used by: batcli vm gennx verify-guest --vm_profile_key vm-gennx-lab
+# See: doc/3. Platform/vm-gennx-guest-exe-resolution.yaml
+version: 1
+vm_profiles:
+  - vm_profile_key: vm-gennx-lab
+    target_key: target-gennx
+    hyper_v_vm_name: GenNX-VM
+    hyperv_switch_name: clibase-internal-nat
+    hyperv_host_gateway_ipv4: 192.168.250.1
+    hyperv_guest_ipv4: 192.168.250.10
+    hyperv_ipv4_prefix_length: 24
+    hyperv_subnet_prefix: 192.168.250.0/24
+    hyperv_nat_name: clibase-vm-nat
+    hyperv_dns_servers:
+      - 1.1.1.1
+      - 8.8.8.8
+    guest_winrm_host: 192.168.250.10
+    guest_clibase_root: C:\MIDAS\code\clibase
+    guest_clibase_search_roots:
+      - C:\Users\dd\Desktop\clibase
+      - C:\Users\dd\MIDAS\code\clibase
+      - C:\MIDAS\code\clibase
+    guest_gennx_exe: C:\Program Files\MIDAS\MODS NX\MIDAS GEN NX\GenNX.exe
+    # PowerShell Direct / WinRM guest credential (overridden by CLIBASE_VM_WINRM_* / CLIBASE_VM_GUEST_* env)
+    guest_local_user: dd
+    guest_local_password: dddd

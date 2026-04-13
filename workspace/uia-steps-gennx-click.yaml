@@ -1,0 +1,7 @@
+- step_key: step-01
+  action_name: flaui.click
+  selector: "AutomationId:256;Name:GridControl;ControlType:Table;Instance:1"
+  value: ""
+  timeout_ms: 60000
+  continue_on_error: false
+  extra_args: []

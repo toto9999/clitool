@@ -10,3 +10,5 @@ tools/uia-recording-test-host/build-exe-work/
 workspace-state/
 workspace/logs/
 *.log
+doc/CLIENT_LTSC_EVAL_x64FRE_ko-kr.iso
+doc/Calculator.exe
